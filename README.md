@@ -31,7 +31,7 @@ No build step, no framework, no dependencies — static HTML/CSS/JS served by a 
 node server.js
 ```
 
-Then open http://localhost:3000. Without `SENDGRID_API_KEY` set, sign-in links aren't emailed —
+Then open http://localhost:3000. Without `BREVO_API_KEY` set, sign-in links aren't emailed —
 they're printed to the server console instead, so you can still sign in while testing.
 
 ## Sign-in / access control
@@ -39,20 +39,19 @@ they're printed to the server console instead, so you can still sign in while te
 Only people with an email on an allowed domain can get in — no password, no account to create.
 They enter their email, get a one-time link by email, click it, done (session lasts 30 days).
 
-**Setting up SendGrid** (the email sender — free tier is 100 emails/day, forever, plenty for an
-internal tool). Uses **Single Sender Verification**, which only requires confirming one inbox
-you control by clicking a link — **no DNS/domain-admin access needed** (unlike most providers,
-which require verifying a whole domain via DNS records before they'll deliver to arbitrary
-recipients):
+**Setting up Brevo** (the email sender — free tier is 300 emails/day, no time limit, plenty for
+an internal tool; SendGrid's free tier, by contrast, is a 60-day trial, not permanent). Verifying
+a single sender only requires confirming one inbox you control via a code emailed to it —
+**no DNS/domain-admin access needed** (unlike most providers, which require verifying a whole
+domain via DNS records before they'll deliver to arbitrary recipients):
 
-1. Go to [sendgrid.com](https://sendgrid.com) and sign up.
-2. **Settings → Sender Authentication → Verify a Single Sender.** Fill in the from name (e.g.
+1. Go to [brevo.com](https://www.brevo.com) and sign up.
+2. **Senders, Domains & Dedicated IPs → Senders → Add a sender.** Fill in the sender name (e.g.
    "Every Day Is Like Sunday") and the from-email address — use an inbox you can read, e.g. your
    own `you@dataart.com` or a shared mailbox like `noreply@dataart.com` if you have one.
-3. SendGrid emails that inbox a confirmation link — open it and click it. Done, no DNS.
-4. **Settings → API Keys → Create API Key** (Restricted Access is fine — just enable "Mail
-   Send"). Copy the key — it's shown once, starts with `SG.`.
-5. In Railway: service → **Variables** → add `SENDGRID_API_KEY` with that value, and `FROM_EMAIL`
+3. Brevo emails that inbox a confirmation code — enter it in Brevo. Done, no DNS.
+4. **SMTP & API → API Keys → Generate a new API key.** Copy it — it's shown once.
+5. In Railway: service → **Variables** → add `BREVO_API_KEY` with that value, and `FROM_EMAIL`
    set to **exactly** the address you verified in step 2, e.g.
    `Every Day Is Like Sunday <you@dataart.com>`.
 
@@ -60,9 +59,9 @@ recipients):
 
 | Variable | Default | What it does |
 | --- | --- | --- |
-| `SENDGRID_API_KEY` | *(none)* | Required to actually send sign-in emails. Without it, links are only logged to the server console — fine for testing, not for real use. |
+| `BREVO_API_KEY` | *(none)* | Required to actually send sign-in emails. Without it, links are only logged to the server console — fine for testing, not for real use. |
 | `ALLOWED_EMAIL_DOMAINS` | `dataart.com` | Comma-separated list of domains allowed to sign in, e.g. `dataart.com,partner.com`. |
-| `FROM_EMAIL` | *(none — required once `SENDGRID_API_KEY` is set)* | Must be exactly the address you verified in SendGrid's Single Sender Verification, e.g. `Every Day Is Like Sunday <you@dataart.com>`. |
+| `FROM_EMAIL` | *(none — required once `BREVO_API_KEY` is set)* | Must be exactly the address you verified as a Brevo sender, e.g. `Every Day Is Like Sunday <you@dataart.com>`. |
 | `APP_BASE_URL` | *(derived from the request)* | The public URL Railway gives the service, e.g. `https://every-day-is-like-sunday.up.railway.app`. **Set this explicitly in production** — without it, the link emailed to people is built from the incoming request's `Host` header, which isn't a value to trust for something that ends up in an email. |
 
 This is sign-in, not a full account system: there's no admin panel, no way to revoke one
@@ -76,7 +75,7 @@ moves behind the company's actual intranet or SSO.
 1. Push this folder to a GitHub repo (or use the Railway CLI directly, see below).
 2. In Railway: **New Project → Deploy from GitHub repo**, pick the repo.
    Railway's Nixpacks builder auto-detects Node from `package.json` and runs `npm start`.
-3. Add the environment variables from the table above (`SENDGRID_API_KEY` and `FROM_EMAIL` at
+3. Add the environment variables from the table above (`BREVO_API_KEY` and `FROM_EMAIL` at
    minimum).
 4. Once deployed, Railway gives you a public URL (or attach your own domain in the project's
    Settings → Domains) — set that as `APP_BASE_URL`.
