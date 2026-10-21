@@ -285,7 +285,7 @@
   // ---- State ----
   var LS_SELECTED = "hs_selected_v1";
   var LS_CUSTOM = "hs_custom_v1";
-  var LS_HOLIDAYS = function (code, year) { return "hs_holidays_" + code + "_" + year; };
+  var LS_HOLIDAYS = function (code, year) { return "hs_holidays_v2_" + code + "_" + year; };
 
   function loadJSON(key, fallback) {
     try {
@@ -366,7 +366,10 @@
         return r.json();
       })
       .then(function (arr) {
-        var data = arr.map(function (h) { return { date: h.date, name: h.localName || h.name }; });
+        var data = arr.map(function (h) {
+          var local = h.localName && h.localName !== h.name ? h.localName : null;
+          return { date: h.date, name: h.name || h.localName, localName: local };
+        });
         holidaysCache[key] = data;
         saveJSON(LS_HOLIDAYS(code, year), { fetchedAt: Date.now(), data: data });
         return data;
@@ -395,7 +398,7 @@
         var list = holidaysCache[code + ":" + year] || [];
         list.forEach(function (h) {
           if (!map[h.date]) map[h.date] = [];
-          map[h.date].push({ code: code, name: h.name });
+          map[h.date].push({ code: code, name: h.name, localName: h.localName });
         });
       });
     });
@@ -584,7 +587,8 @@
 
         var namesHtml = hs.slice(0, 4).map(function (h) {
           var nm = countryNameByCode[h.code] || h.code;
-          return '<div><span class="flag-wrap" title="' + nm.replace(/"/g, "&quot;") + '">' + flagForCode(h.code) + '</span> ' + h.name + "</div>";
+          var nameTitle = h.localName ? ' title="' + h.localName.replace(/"/g, "&quot;") + '"' : "";
+          return '<div><span class="flag-wrap" title="' + nm.replace(/"/g, "&quot;") + '">' + flagForCode(h.code) + '</span> <span' + nameTitle + '>' + h.name + '</span></div>';
         }).join("");
         if (hs.length > 4) namesHtml += '<div>+' + (hs.length - 4) + ' more</div>';
 
@@ -660,7 +664,8 @@
     ul.innerHTML = items.map(function (it) {
       var pills = it.entries.map(function (h) {
         var nm = countryNameByCode[h.code] || h.code;
-        return '<span class="pill"><span title="' + nm.replace(/"/g, "&quot;") + '">' + flagForCode(h.code) + '</span> ' + h.name + "</span>";
+        var nameTitle = h.localName ? ' title="' + h.localName.replace(/"/g, "&quot;") + '"' : "";
+        return '<span class="pill"><span title="' + nm.replace(/"/g, "&quot;") + '">' + flagForCode(h.code) + '</span> <span' + nameTitle + '>' + h.name + "</span></span>";
       }).join("");
       return "<li><span class=\"u-date\">" + it.dt.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) +
         "</span><span class=\"u-countries\">" + pills + "</span></li>";
