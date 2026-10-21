@@ -1,0 +1,20 @@
+{
+  "_readme": "Nager.Date (the live data source this app uses) does not cover AE and IN, so their holidays are maintained here by hand. 'recurring' entries repeat every year on the same month-day (md: MM-DD) — good for fixed-date holidays. 'dates' entries are specific full dates (YYYY-MM-DD) — use these for movable holidays (Eid al-Fitr, Eid al-Adha, Diwali, Holi, etc.) and update them each year from an official source. Keep this file in sync as the only way to get live-like accuracy for these two countries.",
+  "AE": {
+    "recurring": [
+      { "md": "01-01", "name": "New Year's Day" },
+      { "md": "12-01", "name": "Commemoration Day" },
+      { "md": "12-02", "name": "UAE National Day" },
+      { "md": "12-03", "name": "UAE National Day (Day 2)" }
+    ],
+    "dates": []
+  },
+  "IN": {
+    "recurring": [
+      { "md": "01-26", "name": "Republic Day" },
+      { "md": "08-15", "name": "Independence Day" },
+      { "md": "10-02", "name": "Gandhi Jayanti" }
+    ],
+    "dates": []
+  }
+}

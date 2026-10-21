@@ -1,0 +1,13 @@
+{
+  "name": "holiday-scheduler",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Internal tool: calendar of public holidays across DataArt office countries, for scheduling comms activities",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

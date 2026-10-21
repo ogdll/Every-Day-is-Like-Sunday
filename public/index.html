@@ -1,0 +1,704 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Holiday Scheduler — DataArt</title>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --panel: #ffffff;
+    --border: #e3e6ea;
+    --text: #1b1f24;
+    --text-dim: #6b7280;
+    --accent: #2f6fed;
+    --accent-weak: #eaf0fe;
+    --weekend-bg: #f0f1f3;
+    --free-bg: #eaf8ee;
+    --free-border: #bfe8c8;
+    --busy-bg: #fff6ea;
+    --busy-border: #f3dbab;
+    --today-ring: #2f6fed;
+    --shadow: 0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.06);
+    --radius: 12px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1216;
+      --panel: #171b21;
+      --border: #272c34;
+      --text: #e7e9ec;
+      --text-dim: #9aa2ad;
+      --accent: #5b8cff;
+      --accent-weak: #1b2740;
+      --weekend-bg: #1b1f26;
+      --free-bg: #12261a;
+      --free-border: #1f4a2d;
+      --busy-bg: #2a2212;
+      --busy-border: #4a3a16;
+      --today-ring: #5b8cff;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 1px 3px rgba(0,0,0,.4);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.45;
+  }
+  #app { max-width: 1180px; margin: 0 auto; padding: 20px 16px 60px; }
+
+  header.top { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 18px; }
+  header.top h1 { font-size: 20px; margin: 0; }
+  header.top p { margin: 2px 0 0; color: var(--text-dim); font-size: 13px; }
+
+  .layout { display: grid; grid-template-columns: 300px 1fr; gap: 16px; align-items: start; }
+  @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 14px;
+  }
+  .panel + .panel { margin-top: 14px; }
+  .panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-dim); margin: 0 0 10px; }
+
+  .country-row { display: flex; align-items: center; gap: 8px; padding: 5px 2px; border-radius: 8px; cursor: pointer; user-select: none; }
+  .country-row:hover { background: var(--accent-weak); }
+  .country-row input { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
+  .swatch { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+  .flag { font-size: 15px; }
+  .country-name { flex: 1; }
+  .country-cities { color: var(--text-dim); font-size: 11.5px; }
+  .badge-warn {
+    font-size: 10px; padding: 1px 6px; border-radius: 999px;
+    background: var(--busy-bg); border: 1px solid var(--busy-border); color: var(--text-dim);
+  }
+
+  .search-add { display: flex; gap: 6px; margin-top: 10px; }
+  .search-add input {
+    flex: 1; padding: 7px 9px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--text); font-size: 13px;
+  }
+  .search-results {
+    margin-top: 6px; max-height: 160px; overflow: auto; border: 1px solid var(--border); border-radius: 8px;
+    display: none;
+  }
+  .search-results.show { display: block; }
+  .search-result-item { padding: 6px 9px; cursor: pointer; font-size: 13px; display: flex; gap: 8px; align-items: center; }
+  .search-result-item:hover { background: var(--accent-weak); }
+
+  .custom-list { margin-top: 8px; }
+  .remove-btn {
+    margin-left: auto; border: none; background: none; color: var(--text-dim); cursor: pointer;
+    font-size: 15px; line-height: 1; padding: 2px 6px; border-radius: 6px;
+  }
+  .remove-btn:hover { background: var(--busy-bg); color: var(--text); }
+
+  .toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .toolbar .spacer { flex: 1; }
+  .nav-btn, .tab-btn, .refresh-btn {
+    border: 1px solid var(--border); background: var(--panel); color: var(--text);
+    border-radius: 8px; padding: 7px 11px; cursor: pointer; font-size: 13px;
+  }
+  .nav-btn:hover, .tab-btn:hover, .refresh-btn:hover { border-color: var(--accent); }
+  .tab-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .month-label { font-weight: 600; min-width: 150px; text-align: center; }
+
+  table.cal { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  table.cal th { font-size: 11px; color: var(--text-dim); font-weight: 500; padding: 6px 4px; text-align: left; }
+  table.cal td {
+    vertical-align: top; border: 1px solid var(--border); height: 92px; padding: 6px;
+    position: relative;
+  }
+  td.weekend { background: var(--weekend-bg); }
+  td.out-of-month { opacity: .35; }
+  td.has-holiday { background: var(--busy-bg); border-color: var(--busy-border); }
+  td.all-free:not(.weekend) { background: var(--free-bg); border-color: var(--free-border); }
+  td.today { box-shadow: inset 0 0 0 2px var(--today-ring); }
+  .day-num { font-size: 12px; color: var(--text-dim); }
+  td.today .day-num { color: var(--today-ring); font-weight: 700; }
+  .dots { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 5px; }
+  .dot { width: 8px; height: 8px; border-radius: 2px; cursor: default; }
+  .holiday-names { margin-top: 4px; font-size: 10.5px; color: var(--text-dim); max-height: 48px; overflow: hidden; }
+  .holiday-names div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; font-size: 12px; color: var(--text-dim); }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .legend .box { width: 10px; height: 10px; border-radius: 3px; }
+
+  .free-list, .upcoming-list { list-style: none; margin: 0; padding: 0; }
+  .free-list li, .upcoming-list li {
+    display: flex; justify-content: space-between; gap: 8px; padding: 6px 4px; border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .free-list li:last-child, .upcoming-list li:last-child { border-bottom: none; }
+  .upcoming-list .u-date { color: var(--text-dim); flex: none; width: 92px; }
+  .upcoming-list .u-countries { display: flex; gap: 4px; flex-wrap: wrap; }
+  .pill {
+    font-size: 11px; padding: 1px 7px; border-radius: 999px; color: #fff; white-space: nowrap;
+  }
+
+  .status { color: var(--text-dim); font-size: 12px; margin-top: 6px; }
+  .status.error { color: #d1453b; }
+  .view { display: none; }
+  .view.active { display: block; }
+  footer.note { margin-top: 22px; color: var(--text-dim); font-size: 12px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="top">
+    <div>
+      <h1>Holiday Scheduler</h1>
+      <p>Find dates when none of your selected countries have a public holiday — live data per country.</p>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside>
+      <div class="panel">
+        <h2>DataArt offices</h2>
+        <div id="officeList"></div>
+      </div>
+      <div class="panel">
+        <h2>Other countries</h2>
+        <div id="customList" class="custom-list"></div>
+        <div class="search-add">
+          <input id="countrySearch" type="text" placeholder="Add a country…" autocomplete="off">
+        </div>
+        <div id="searchResults" class="search-results"></div>
+      </div>
+      <div class="panel">
+        <h2>Next holiday-free weekdays</h2>
+        <ul id="freeList" class="free-list"></ul>
+        <div id="freeStatus" class="status"></div>
+      </div>
+    </aside>
+
+    <main>
+      <div class="toolbar">
+        <button class="tab-btn active" data-view="calendar">Calendar</button>
+        <button class="tab-btn" data-view="list">Upcoming list</button>
+        <div class="spacer"></div>
+        <button class="refresh-btn" id="refreshBtn" title="Re-fetch holiday data">↻ Refresh data</button>
+      </div>
+
+      <div id="calendarView" class="view active panel">
+        <div class="toolbar" style="margin-bottom:10px;">
+          <button class="nav-btn" id="prevMonth">←</button>
+          <div class="month-label" id="monthLabel"></div>
+          <button class="nav-btn" id="nextMonth">→</button>
+          <div class="spacer"></div>
+          <button class="nav-btn" id="todayBtn">Today</button>
+        </div>
+        <table class="cal">
+          <thead>
+            <tr>
+              <th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th><th>Sun</th>
+            </tr>
+          </thead>
+          <tbody id="calBody"></tbody>
+        </table>
+        <div class="legend" id="legend"></div>
+        <div id="calStatus" class="status"></div>
+      </div>
+
+      <div id="listView" class="view panel">
+        <h2 style="margin-top:0;">Holidays in the next 180 days</h2>
+        <ul id="upcomingList" class="upcoming-list"></ul>
+        <div id="listStatus" class="status"></div>
+      </div>
+    </main>
+  </div>
+
+  <footer class="note">
+    Live data from <a href="https://date.nager.at" target="_blank" rel="noopener">date.nager.at</a>.
+    United Arab Emirates and India aren't covered by that source — their holidays come from
+    <code>custom-holidays.json</code> in this project (fixed-date holidays only; movable ones like Eid or Diwali
+    need to be added by hand each year — see the file's <code>_readme</code>).
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---- Default office countries (DataArt offices, from dataart.com/contact-us) ----
+  var OFFICES = [
+    { code: "US", name: "United States", cities: "Dallas, New York, Orlando" },
+    { code: "MX", name: "Mexico", cities: "Monterrey" },
+    { code: "GB", name: "United Kingdom", cities: "London" },
+    { code: "CH", name: "Switzerland", cities: "Zug" },
+    { code: "DE", name: "Germany", cities: "Munich" },
+    { code: "CY", name: "Cyprus", cities: "Larnaca" },
+    { code: "LV", name: "Latvia", cities: "Riga" },
+    { code: "PL", name: "Poland", cities: "Krakow, Lodz, Lublin, Warsaw, Wroclaw" },
+    { code: "RO", name: "Romania", cities: "Cluj-Napoca" },
+    { code: "RS", name: "Serbia", cities: "Belgrade, Novi Sad" },
+    { code: "BG", name: "Bulgaria", cities: "Sofia, Varna" },
+    { code: "UA", name: "Ukraine", cities: "Dnipro, Kharkiv, Kyiv, Lviv, Odesa" },
+    { code: "GE", name: "Georgia", cities: "Tbilisi" },
+    { code: "AM", name: "Armenia", cities: "Yerevan" },
+    { code: "KZ", name: "Kazakhstan", cities: "Almaty, Astana" },
+    { code: "AE", name: "United Arab Emirates", cities: "Dubai", noLive: true },
+    { code: "IN", name: "India", cities: "Bengaluru", noLive: true }
+  ];
+  var OFFICE_CODES = OFFICES.map(function (o) { return o.code; });
+
+  // Fallback country catalogue (used if the live AvailableCountries call fails).
+  var FALLBACK_COUNTRIES = [{"countryCode":"AD","name":"Andorra"},{"countryCode":"AG","name":"Antigua and Barbuda"},{"countryCode":"AI","name":"Anguilla"},{"countryCode":"AL","name":"Albania"},{"countryCode":"AM","name":"Armenia"},{"countryCode":"AO","name":"Angola"},{"countryCode":"AR","name":"Argentina"},{"countryCode":"AT","name":"Austria"},{"countryCode":"AU","name":"Australia"},{"countryCode":"AW","name":"Aruba"},{"countryCode":"AX","name":"Åland Islands"},{"countryCode":"BA","name":"Bosnia and Herzegovina"},{"countryCode":"BB","name":"Barbados"},{"countryCode":"BD","name":"Bangladesh"},{"countryCode":"BE","name":"Belgium"},{"countryCode":"BF","name":"Burkina Faso"},{"countryCode":"BG","name":"Bulgaria"},{"countryCode":"BH","name":"Bahrain"},{"countryCode":"BI","name":"Burundi"},{"countryCode":"BJ","name":"Benin"},{"countryCode":"BL","name":"Saint Barthélemy"},{"countryCode":"BM","name":"Bermuda"},{"countryCode":"BO","name":"Bolivia"},{"countryCode":"BQ","name":"Caribbean Netherlands"},{"countryCode":"BR","name":"Brazil"},{"countryCode":"BS","name":"Bahamas"},{"countryCode":"BW","name":"Botswana"},{"countryCode":"BY","name":"Belarus"},{"countryCode":"BZ","name":"Belize"},{"countryCode":"CA","name":"Canada"},{"countryCode":"CC","name":"Cocos (Keeling) Islands"},{"countryCode":"CD","name":"DR Congo"},{"countryCode":"CF","name":"Central African Republic"},{"countryCode":"CG","name":"Congo"},{"countryCode":"CH","name":"Switzerland"},{"countryCode":"CI","name":"Ivory Coast"},{"countryCode":"CK","name":"Cook Islands"},{"countryCode":"CL","name":"Chile"},{"countryCode":"CM","name":"Cameroon"},{"countryCode":"CN","name":"China"},{"countryCode":"CO","name":"Colombia"},{"countryCode":"CR","name":"Costa Rica"},{"countryCode":"CU","name":"Cuba"},{"countryCode":"CV","name":"Cape Verde"},{"countryCode":"CW","name":"Curaçao"},{"countryCode":"CX","name":"Christmas Island"},{"countryCode":"CY","name":"Cyprus"},{"countryCode":"CZ","name":"Czechia"},{"countryCode":"DE","name":"Germany"},{"countryCode":"DJ","name":"Djibouti"},{"countryCode":"DK","name":"Denmark"},{"countryCode":"DM","name":"Dominica"},{"countryCode":"DO","name":"Dominican Republic"},{"countryCode":"DZ","name":"Algeria"},{"countryCode":"EC","name":"Ecuador"},{"countryCode":"EE","name":"Estonia"},{"countryCode":"EG","name":"Egypt"},{"countryCode":"ER","name":"Eritrea"},{"countryCode":"ES","name":"Spain"},{"countryCode":"ET","name":"Ethiopia"},{"countryCode":"FI","name":"Finland"},{"countryCode":"FK","name":"Falkland Islands"},{"countryCode":"FM","name":"Micronesia"},{"countryCode":"FO","name":"Faroe Islands"},{"countryCode":"FR","name":"France"},{"countryCode":"GA","name":"Gabon"},{"countryCode":"GB","name":"United Kingdom"},{"countryCode":"GD","name":"Grenada"},{"countryCode":"GE","name":"Georgia"},{"countryCode":"GF","name":"French Guiana"},{"countryCode":"GG","name":"Guernsey"},{"countryCode":"GH","name":"Ghana"},{"countryCode":"GI","name":"Gibraltar"},{"countryCode":"GL","name":"Greenland"},{"countryCode":"GM","name":"Gambia"},{"countryCode":"GN","name":"Guinea"},{"countryCode":"GP","name":"Guadeloupe"},{"countryCode":"GQ","name":"Equatorial Guinea"},{"countryCode":"GR","name":"Greece"},{"countryCode":"GT","name":"Guatemala"},{"countryCode":"GW","name":"Guinea-Bissau"},{"countryCode":"GY","name":"Guyana"},{"countryCode":"HK","name":"Hong Kong"},{"countryCode":"HN","name":"Honduras"},{"countryCode":"HR","name":"Croatia"},{"countryCode":"HT","name":"Haiti"},{"countryCode":"HU","name":"Hungary"},{"countryCode":"ID","name":"Indonesia"},{"countryCode":"IE","name":"Ireland"},{"countryCode":"IM","name":"Isle of Man"},{"countryCode":"IQ","name":"Iraq"},{"countryCode":"IS","name":"Iceland"},{"countryCode":"IT","name":"Italy"},{"countryCode":"JE","name":"Jersey"},{"countryCode":"JM","name":"Jamaica"},{"countryCode":"JP","name":"Japan"},{"countryCode":"KE","name":"Kenya"},{"countryCode":"KH","name":"Cambodia"},{"countryCode":"KI","name":"Kiribati"},{"countryCode":"KM","name":"Comoros"},{"countryCode":"KN","name":"Saint Kitts and Nevis"},{"countryCode":"KR","name":"South Korea"},{"countryCode":"KY","name":"Cayman Islands"},{"countryCode":"KZ","name":"Kazakhstan"},{"countryCode":"LC","name":"Saint Lucia"},{"countryCode":"LI","name":"Liechtenstein"},{"countryCode":"LR","name":"Liberia"},{"countryCode":"LS","name":"Lesotho"},{"countryCode":"LT","name":"Lithuania"},{"countryCode":"LU","name":"Luxembourg"},{"countryCode":"LV","name":"Latvia"},{"countryCode":"LY","name":"Libya"},{"countryCode":"MA","name":"Morocco"},{"countryCode":"MC","name":"Monaco"},{"countryCode":"MD","name":"Moldova"},{"countryCode":"ME","name":"Montenegro"},{"countryCode":"MF","name":"Saint Martin"},{"countryCode":"MG","name":"Madagascar"},{"countryCode":"MH","name":"Marshall Islands"},{"countryCode":"MK","name":"North Macedonia"},{"countryCode":"ML","name":"Mali"},{"countryCode":"MN","name":"Mongolia"},{"countryCode":"MP","name":"Northern Mariana Islands"},{"countryCode":"MQ","name":"Martinique"},{"countryCode":"MR","name":"Mauritania"},{"countryCode":"MS","name":"Montserrat"},{"countryCode":"MT","name":"Malta"},{"countryCode":"MW","name":"Malawi"},{"countryCode":"MX","name":"Mexico"},{"countryCode":"MZ","name":"Mozambique"},{"countryCode":"NA","name":"Namibia"},{"countryCode":"NC","name":"New Caledonia"},{"countryCode":"NE","name":"Niger"},{"countryCode":"NF","name":"Norfolk Island"},{"countryCode":"NG","name":"Nigeria"},{"countryCode":"NI","name":"Nicaragua"},{"countryCode":"NL","name":"Netherlands"},{"countryCode":"NO","name":"Norway"},{"countryCode":"NR","name":"Nauru"},{"countryCode":"NU","name":"Niue"},{"countryCode":"NZ","name":"New Zealand"},{"countryCode":"PA","name":"Panama"},{"countryCode":"PE","name":"Peru"},{"countryCode":"PF","name":"French Polynesia"},{"countryCode":"PG","name":"Papua New Guinea"},{"countryCode":"PH","name":"Philippines"},{"countryCode":"PL","name":"Poland"},{"countryCode":"PM","name":"Saint Pierre and Miquelon"},{"countryCode":"PN","name":"Pitcairn Islands"},{"countryCode":"PR","name":"Puerto Rico"},{"countryCode":"PT","name":"Portugal"},{"countryCode":"PW","name":"Palau"},{"countryCode":"PY","name":"Paraguay"},{"countryCode":"RO","name":"Romania"},{"countryCode":"RS","name":"Serbia"},{"countryCode":"RU","name":"Russia"},{"countryCode":"RW","name":"Rwanda"},{"countryCode":"SB","name":"Solomon Islands"},{"countryCode":"SC","name":"Seychelles"},{"countryCode":"SD","name":"Sudan"},{"countryCode":"SE","name":"Sweden"},{"countryCode":"SG","name":"Singapore"},{"countryCode":"SH","name":"Saint Helena, Ascension and Tristan da Cunha"},{"countryCode":"SI","name":"Slovenia"},{"countryCode":"SJ","name":"Svalbard and Jan Mayen"},{"countryCode":"SK","name":"Slovakia"},{"countryCode":"SL","name":"Sierra Leone"},{"countryCode":"SM","name":"San Marino"},{"countryCode":"SN","name":"Senegal"},{"countryCode":"SO","name":"Somalia"},{"countryCode":"SR","name":"Suriname"},{"countryCode":"SS","name":"South Sudan"},{"countryCode":"ST","name":"São Tomé and Príncipe"},{"countryCode":"SV","name":"El Salvador"},{"countryCode":"SX","name":"Sint Maarten"},{"countryCode":"SY","name":"Syria"},{"countryCode":"SZ","name":"Eswatini"},{"countryCode":"TC","name":"Turks and Caicos Islands"},{"countryCode":"TD","name":"Chad"},{"countryCode":"TG","name":"Togo"},{"countryCode":"TK","name":"Tokelau"},{"countryCode":"TN","name":"Tunisia"},{"countryCode":"TO","name":"Tonga"},{"countryCode":"TR","name":"Türkiye"},{"countryCode":"TT","name":"Trinidad and Tobago"},{"countryCode":"TV","name":"Tuvalu"},{"countryCode":"TZ","name":"Tanzania"},{"countryCode":"UA","name":"Ukraine"},{"countryCode":"UG","name":"Uganda"},{"countryCode":"US","name":"United States"},{"countryCode":"UY","name":"Uruguay"},{"countryCode":"VA","name":"Vatican City"},{"countryCode":"VC","name":"Saint Vincent and the Grenadines"},{"countryCode":"VE","name":"Venezuela"},{"countryCode":"VG","name":"British Virgin Islands"},{"countryCode":"VI","name":"United States Virgin Islands"},{"countryCode":"VN","name":"Vietnam"},{"countryCode":"VU","name":"Vanuatu"},{"countryCode":"WF","name":"Wallis and Futuna"},{"countryCode":"WS","name":"Samoa"},{"countryCode":"YE","name":"Yemen"},{"countryCode":"ZA","name":"South Africa"},{"countryCode":"ZM","name":"Zambia"},{"countryCode":"ZW","name":"Zimbabwe"}];
+
+  var allCountries = FALLBACK_COUNTRIES.slice(); // code -> name catalogue, replaced by live fetch if possible
+  var countryNameByCode = {};
+  allCountries.forEach(function (c) { countryNameByCode[c.countryCode] = c.name; });
+  OFFICES.forEach(function (o) { countryNameByCode[o.code] = o.name; });
+
+  // ---- State ----
+  var LS_SELECTED = "hs_selected_v1";
+  var LS_CUSTOM = "hs_custom_v1";
+  var LS_HOLIDAYS = function (code, year) { return "hs_holidays_" + code + "_" + year; };
+
+  function loadJSON(key, fallback) {
+    try {
+      var v = localStorage.getItem(key);
+      return v ? JSON.parse(v) : fallback;
+    } catch (e) { return fallback; }
+  }
+  function saveJSON(key, val) {
+    try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {}
+  }
+
+  var selected = loadJSON(LS_SELECTED, OFFICE_CODES.slice());
+  var customCodes = loadJSON(LS_CUSTOM, []); // countries added beyond the office list
+
+  function isSelected(code) { return selected.indexOf(code) !== -1; }
+  function setSelected(code, on) {
+    var i = selected.indexOf(code);
+    if (on && i === -1) selected.push(code);
+    if (!on && i !== -1) selected.splice(i, 1);
+    saveJSON(LS_SELECTED, selected);
+  }
+
+  // ---- Colors ----
+  function colorForCode(code) {
+    var h = 0;
+    for (var i = 0; i < code.length; i++) h = (h * 31 + code.charCodeAt(i)) % 360;
+    return "hsl(" + h + ", 65%, 45%)";
+  }
+
+  function flagForCode(code) {
+    if (!code || code.length !== 2) return "";
+    var a = code.toUpperCase();
+    var base = 127397;
+    return String.fromCodePoint(a.charCodeAt(0) + base, a.charCodeAt(1) + base);
+  }
+
+  // ---- Holiday data ----
+  var holidaysCache = {}; // `${code}:${year}` -> [{date:'YYYY-MM-DD', name}]
+  var CACHE_TTL_MS = 12 * 60 * 60 * 1000;
+  var customHolidayData = null; // from custom-holidays.json
+
+  function fetchCustomHolidays() {
+    if (customHolidayData) return Promise.resolve(customHolidayData);
+    return fetch("custom-holidays.json").then(function (r) {
+      return r.ok ? r.json() : {};
+    }).catch(function () { return {}; }).then(function (data) {
+      customHolidayData = data || {};
+      return customHolidayData;
+    });
+  }
+
+  function customHolidaysFor(code, year) {
+    var entry = customHolidayData && customHolidayData[code];
+    if (!entry) return [];
+    var out = [];
+    (entry.recurring || []).forEach(function (r) {
+      out.push({ date: year + "-" + r.md, name: r.name });
+    });
+    (entry.dates || []).forEach(function (d) {
+      if (d.date && d.date.indexOf(year + "-") === 0) out.push({ date: d.date, name: d.name });
+    });
+    return out;
+  }
+
+  function fetchHolidays(code, year, force) {
+    var key = code + ":" + year;
+    if (!force) {
+      var cached = loadJSON(LS_HOLIDAYS(code, year), null);
+      if (cached && (Date.now() - cached.fetchedAt) < CACHE_TTL_MS) {
+        holidaysCache[key] = cached.data;
+        return Promise.resolve(cached.data);
+      }
+    }
+    var office = OFFICES.filter(function (o) { return o.code === code; })[0];
+    if (office && office.noLive) {
+      return fetchCustomHolidays().then(function () {
+        var data = customHolidaysFor(code, year);
+        holidaysCache[key] = data;
+        return data;
+      });
+    }
+    return fetch("https://date.nager.at/api/v3/PublicHolidays/" + year + "/" + code)
+      .then(function (r) {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.json();
+      })
+      .then(function (arr) {
+        var data = arr.map(function (h) { return { date: h.date, name: h.localName || h.name }; });
+        holidaysCache[key] = data;
+        saveJSON(LS_HOLIDAYS(code, year), { fetchedAt: Date.now(), data: data });
+        return data;
+      })
+      .catch(function (err) {
+        holidaysCache[key] = [];
+        return [];
+      });
+  }
+
+  function ensureHolidaysLoaded(codes, years, force) {
+    var jobs = [];
+    codes.forEach(function (code) {
+      years.forEach(function (year) {
+        jobs.push(fetchHolidays(code, year, force));
+      });
+    });
+    return Promise.all(jobs);
+  }
+
+  // Build date -> [{code, name}] map for currently selected countries across given years
+  function buildHolidayMap(years) {
+    var map = {};
+    selected.forEach(function (code) {
+      years.forEach(function (year) {
+        var list = holidaysCache[code + ":" + year] || [];
+        list.forEach(function (h) {
+          if (!map[h.date]) map[h.date] = [];
+          map[h.date].push({ code: code, name: h.name });
+        });
+      });
+    });
+    return map;
+  }
+
+  // ---- Render: country panels ----
+  function renderOfficeList() {
+    var el = document.getElementById("officeList");
+    el.innerHTML = "";
+    OFFICES.forEach(function (o) {
+      var row = document.createElement("label");
+      row.className = "country-row";
+      var warn = o.noLive ? '<span class="badge-warn" title="No live source — see custom-holidays.json">manual</span>' : "";
+      row.innerHTML =
+        '<input type="checkbox" data-code="' + o.code + '" ' + (isSelected(o.code) ? "checked" : "") + '>' +
+        '<span class="swatch" style="background:' + colorForCode(o.code) + '"></span>' +
+        '<span class="flag">' + flagForCode(o.code) + "</span>" +
+        '<span class="country-name">' + o.name + '<div class="country-cities">' + o.cities + "</div></span>" +
+        warn;
+      el.appendChild(row);
+    });
+    el.querySelectorAll("input[type=checkbox]").forEach(function (cb) {
+      cb.addEventListener("change", function () {
+        setSelected(cb.getAttribute("data-code"), cb.checked);
+        refreshAndRender();
+      });
+    });
+  }
+
+  function renderCustomList() {
+    var el = document.getElementById("customList");
+    el.innerHTML = "";
+    if (customCodes.length === 0) {
+      el.innerHTML = '<div class="status">No extra countries added yet.</div>';
+      return;
+    }
+    customCodes.forEach(function (code) {
+      var row = document.createElement("label");
+      row.className = "country-row";
+      row.innerHTML =
+        '<input type="checkbox" data-code="' + code + '" ' + (isSelected(code) ? "checked" : "") + '>' +
+        '<span class="swatch" style="background:' + colorForCode(code) + '"></span>' +
+        '<span class="flag">' + flagForCode(code) + "</span>" +
+        '<span class="country-name">' + (countryNameByCode[code] || code) + "</span>" +
+        '<button class="remove-btn" data-code="' + code + '" title="Remove">×</button>';
+      el.appendChild(row);
+    });
+    el.querySelectorAll("input[type=checkbox]").forEach(function (cb) {
+      cb.addEventListener("change", function () {
+        setSelected(cb.getAttribute("data-code"), cb.checked);
+        refreshAndRender();
+      });
+    });
+    el.querySelectorAll(".remove-btn").forEach(function (btn) {
+      btn.addEventListener("click", function (e) {
+        e.preventDefault();
+        var code = btn.getAttribute("data-code");
+        customCodes = customCodes.filter(function (c) { return c !== code; });
+        setSelected(code, false);
+        saveJSON(LS_CUSTOM, customCodes);
+        renderCustomList();
+        refreshAndRender();
+      });
+    });
+  }
+
+  function setupCountrySearch() {
+    var input = document.getElementById("countrySearch");
+    var results = document.getElementById("searchResults");
+    input.addEventListener("input", function () {
+      var q = input.value.trim().toLowerCase();
+      if (!q) { results.classList.remove("show"); results.innerHTML = ""; return; }
+      var excluded = OFFICE_CODES.concat(customCodes);
+      var matches = allCountries.filter(function (c) {
+        return excluded.indexOf(c.countryCode) === -1 &&
+          (c.name.toLowerCase().indexOf(q) !== -1 || c.countryCode.toLowerCase() === q);
+      }).slice(0, 12);
+      if (matches.length === 0) {
+        results.innerHTML = '<div class="search-result-item">No match</div>';
+      } else {
+        results.innerHTML = matches.map(function (c) {
+          return '<div class="search-result-item" data-code="' + c.countryCode + '">' +
+            flagForCode(c.countryCode) + " " + c.name + "</div>";
+        }).join("");
+      }
+      results.classList.add("show");
+      results.querySelectorAll(".search-result-item[data-code]").forEach(function (item) {
+        item.addEventListener("click", function () {
+          var code = item.getAttribute("data-code");
+          if (customCodes.indexOf(code) === -1) customCodes.push(code);
+          setSelected(code, true);
+          saveJSON(LS_CUSTOM, customCodes);
+          input.value = "";
+          results.classList.remove("show");
+          renderCustomList();
+          refreshAndRender();
+        });
+      });
+    });
+    document.addEventListener("click", function (e) {
+      if (!results.contains(e.target) && e.target !== input) results.classList.remove("show");
+    });
+  }
+
+  // ---- Calendar view ----
+  var view = { year: new Date().getFullYear(), month: new Date().getMonth() }; // month 0-11
+  var currentTab = "calendar";
+
+  function fmtDate(y, m, d) {
+    return y + "-" + String(m + 1).padStart(2, "0") + "-" + String(d).padStart(2, "0");
+  }
+
+  function renderCalendar(holidayMap) {
+    var y = view.year, m = view.month;
+    document.getElementById("monthLabel").textContent =
+      new Date(y, m, 1).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+
+    var first = new Date(y, m, 1);
+    var startOffset = (first.getDay() + 6) % 7; // Monday = 0
+    var daysInMonth = new Date(y, m + 1, 0).getDate();
+    var daysInPrevMonth = new Date(y, m, 0).getDate();
+
+    var cells = [];
+    for (var i = 0; i < startOffset; i++) {
+      cells.push({ day: daysInPrevMonth - startOffset + i + 1, outOfMonth: true, y: m === 0 ? y - 1 : y, m: (m + 11) % 12 });
+    }
+    for (var d = 1; d <= daysInMonth; d++) cells.push({ day: d, outOfMonth: false, y: y, m: m });
+    while (cells.length % 7 !== 0 || cells.length < 42) {
+      var last = cells[cells.length - 1];
+      var nd = new Date(last.y, last.m, last.day + 1);
+      cells.push({ day: nd.getDate(), outOfMonth: true, y: nd.getFullYear(), m: nd.getMonth() });
+      if (cells.length >= 42) break;
+    }
+
+    var todayStr = fmtDate(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
+    var body = document.getElementById("calBody");
+    body.innerHTML = "";
+    for (var r = 0; r < cells.length / 7; r++) {
+      var tr = document.createElement("tr");
+      for (var c = 0; c < 7; c++) {
+        var cell = cells[r * 7 + c];
+        var dateStr = fmtDate(cell.y, cell.m, cell.day);
+        var isWeekend = c >= 5;
+        var hs = holidayMap[dateStr] || [];
+        var td = document.createElement("td");
+        var classes = [];
+        if (cell.outOfMonth) classes.push("out-of-month");
+        if (isWeekend) classes.push("weekend");
+        if (hs.length > 0) classes.push("has-holiday");
+        else if (!isWeekend && !cell.outOfMonth && selected.length > 0) classes.push("all-free");
+        if (dateStr === todayStr) classes.push("today");
+        td.className = classes.join(" ");
+
+        var dotsHtml = hs.map(function (h) {
+          var nm = (countryNameByCode[h.code] || h.code) + ": " + h.name;
+          return '<span class="dot" style="background:' + colorForCode(h.code) + '" title="' + nm.replace(/"/g, "&quot;") + '"></span>';
+        }).join("");
+
+        var namesHtml = hs.slice(0, 3).map(function (h) {
+          return '<div>' + flagForCode(h.code) + " " + h.name + "</div>";
+        }).join("");
+        if (hs.length > 3) namesHtml += '<div>+' + (hs.length - 3) + ' more</div>';
+
+        td.innerHTML =
+          '<div class="day-num">' + cell.day + "</div>" +
+          (dotsHtml ? '<div class="dots">' + dotsHtml + "</div>" : "") +
+          (namesHtml ? '<div class="holiday-names">' + namesHtml + "</div>" : "");
+        tr.appendChild(td);
+      }
+      body.appendChild(tr);
+    }
+
+    var legend = document.getElementById("legend");
+    legend.innerHTML = selected.map(function (code) {
+      return '<span><span class="box" style="background:' + colorForCode(code) + '"></span>' +
+        flagForCode(code) + " " + (countryNameByCode[code] || code) + "</span>";
+    }).join("") + '<span><span class="box" style="background:var(--free-bg);border:1px solid var(--free-border)"></span>No holidays (selected countries)</span>';
+  }
+
+  // ---- Next holiday-free weekdays ----
+  function renderFreeList(holidayMapByYear) {
+    var out = [];
+    var d = new Date();
+    d.setHours(0, 0, 0, 0);
+    var guard = 0;
+    while (out.length < 10 && guard < 200) {
+      guard++;
+      var dow = d.getDay();
+      if (dow !== 0 && dow !== 6) {
+        var y = d.getFullYear();
+        var dateStr = fmtDate(y, d.getMonth(), d.getDate());
+        var map = holidayMapByYear[y] || {};
+        if (!map[dateStr] || map[dateStr].length === 0) {
+          out.push(new Date(d));
+        }
+      }
+      d.setDate(d.getDate() + 1);
+    }
+    var ul = document.getElementById("freeList");
+    if (selected.length === 0) {
+      ul.innerHTML = "";
+      document.getElementById("freeStatus").textContent = "Select at least one country.";
+      return;
+    }
+    document.getElementById("freeStatus").textContent = "";
+    ul.innerHTML = out.map(function (dt) {
+      return "<li>" + dt.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) + "</li>";
+    }).join("");
+  }
+
+  // ---- Upcoming list view ----
+  function renderUpcomingList(holidayMapByYear) {
+    var start = new Date(); start.setHours(0, 0, 0, 0);
+    var end = new Date(start); end.setDate(end.getDate() + 180);
+    var items = [];
+    for (var yy = start.getFullYear(); yy <= end.getFullYear(); yy++) {
+      var map = holidayMapByYear[yy] || {};
+      Object.keys(map).forEach(function (dateStr) {
+        var dt = new Date(dateStr + "T00:00:00");
+        if (dt >= start && dt <= end) {
+          items.push({ date: dateStr, dt: dt, entries: map[dateStr] });
+        }
+      });
+    }
+    items.sort(function (a, b) { return a.dt - b.dt; });
+    var ul = document.getElementById("upcomingList");
+    if (selected.length === 0) {
+      ul.innerHTML = "";
+      document.getElementById("listStatus").textContent = "Select at least one country.";
+      return;
+    }
+    document.getElementById("listStatus").textContent = items.length === 0 ? "No holidays found in this window." : "";
+    ul.innerHTML = items.map(function (it) {
+      var pills = it.entries.map(function (h) {
+        return '<span class="pill" style="background:' + colorForCode(h.code) + '" title="' + h.name.replace(/"/g, "&quot;") + '">' +
+          flagForCode(h.code) + " " + h.name + "</span>";
+      }).join("");
+      return "<li><span class=\"u-date\">" + it.dt.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) +
+        "</span><span class=\"u-countries\">" + pills + "</span></li>";
+    }).join("");
+  }
+
+  // ---- Orchestration ----
+  function refreshAndRender(force) {
+    var years = Array.from(new Set([view.year, view.year + 1, new Date().getFullYear(), new Date().getFullYear() + 1]));
+    document.getElementById("calStatus").textContent = "Loading holiday data…";
+    document.getElementById("listStatus").textContent = "Loading holiday data…";
+    var codes = selected.slice();
+    if (codes.length === 0) {
+      document.getElementById("calBody").innerHTML = "";
+      document.getElementById("calStatus").textContent = "Select at least one country to see holidays.";
+      document.getElementById("legend").innerHTML = "";
+      renderFreeList({});
+      renderUpcomingList({});
+      return;
+    }
+    ensureHolidaysLoaded(codes, years, force).then(function () {
+      var mapByYear = {};
+      years.forEach(function (y) { mapByYear[y] = buildHolidayMap([y]); });
+      renderCalendar(mapByYear[view.year] || {});
+      document.getElementById("calStatus").textContent = "";
+      renderFreeList(mapByYear);
+      renderUpcomingList(mapByYear);
+    }).catch(function () {
+      document.getElementById("calStatus").textContent = "Some holiday data failed to load.";
+    });
+  }
+
+  // ---- Wiring ----
+  function init() {
+    renderOfficeList();
+    renderCustomList();
+    setupCountrySearch();
+
+    document.getElementById("prevMonth").addEventListener("click", function () {
+      view.month--; if (view.month < 0) { view.month = 11; view.year--; }
+      refreshAndRender();
+    });
+    document.getElementById("nextMonth").addEventListener("click", function () {
+      view.month++; if (view.month > 11) { view.month = 0; view.year++; }
+      refreshAndRender();
+    });
+    document.getElementById("todayBtn").addEventListener("click", function () {
+      var now = new Date(); view.year = now.getFullYear(); view.month = now.getMonth();
+      refreshAndRender();
+    });
+    document.getElementById("refreshBtn").addEventListener("click", function () {
+      refreshAndRender(true);
+    });
+    document.querySelectorAll(".tab-btn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        document.querySelectorAll(".tab-btn").forEach(function (b) { b.classList.remove("active"); });
+        btn.classList.add("active");
+        currentTab = btn.getAttribute("data-view");
+        document.getElementById("calendarView").classList.toggle("active", currentTab === "calendar");
+        document.getElementById("listView").classList.toggle("active", currentTab === "list");
+      });
+    });
+
+    // Try to refresh the country catalogue from the live API (non-blocking, falls back silently).
+    fetch("https://date.nager.at/api/v3/AvailableCountries").then(function (r) {
+      return r.ok ? r.json() : null;
+    }).then(function (data) {
+      if (data && data.length) {
+        allCountries = data;
+        data.forEach(function (c) { countryNameByCode[c.countryCode] = c.name; });
+      }
+    }).catch(function () {});
+
+    refreshAndRender();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+})();
+</script>
+</body>
+</html>
