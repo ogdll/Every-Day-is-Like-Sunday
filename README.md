@@ -14,14 +14,14 @@ is a calendar where, ideally, every working day looks as quiet as a Sunday.
   like Eid or Diwali).
 - "Next holiday-free weekdays" and the calendar highlight days when **none** of the selected
   countries have a holiday — that's the window to schedule activities in.
-- Anyone can add their own **events** to a day (click "+ event" on a cell, or an existing event
-  to edit it). Everyone sees all events; only the person who added one can edit or delete it.
-  Ownership is just a display name typed into the app (top-right "👤" button) — there's no
-  login, so it's a convention enforced by the UI and the API, not real authentication. Good
-  enough for a trusted internal team; don't rely on it if the deployed URL isn't private.
+- Anyone signed in can add their own **events** to a day (click "+ event" on a cell, or an
+  existing event to edit it). Everyone sees all events; only the person who added one can edit
+  or delete it — enforced server-side against the signed-in session, not a client-sent name.
 - Events are stored server-side (not per-browser) in a JSON file, via a tiny API in `server.js`
-  (`/api/events`), so everyone on the team sees the same calendar. See "Persisting events" below
+  (`/api/events`), so everyone on the team sees the same calendar. See "Persisting data" below
   for what this means on Railway.
+- **Access is gated by email sign-in** (passwordless, magic-link): only addresses on an allowed
+  domain (`dataart.com` by default) can get in. See "Sign-in / access control" below for setup.
 
 No build step, no framework, no dependencies — static HTML/CSS/JS served by a tiny Node server.
 
@@ -31,16 +31,52 @@ No build step, no framework, no dependencies — static HTML/CSS/JS served by a 
 node server.js
 ```
 
-Then open http://localhost:3000.
+Then open http://localhost:3000. Without `RESEND_API_KEY` set, sign-in links aren't emailed —
+they're printed to the server console instead, so you can still sign in while testing.
+
+## Sign-in / access control
+
+Only people with an email on an allowed domain can get in — no password, no account to create.
+They enter their email, get a one-time link by email, click it, done (session lasts 30 days).
+
+**Setting up Resend** (the email sender — free tier is 100 emails/day, 3,000/month, plenty for
+an internal tool):
+
+1. Go to [resend.com](https://resend.com) and sign up (GitHub or email).
+2. In the dashboard: **API Keys → Create API Key**. Name it anything (e.g. "every-day"), leave
+   permissions as "Full access" (or "Sending access" only, which is enough). Copy the key —
+   it's shown once, starts with `re_`.
+3. In Railway: open the service → **Variables** → add `RESEND_API_KEY` with that value.
+4. That's it for a first deploy. Resend's shared `onboarding@resend.dev` sender works out of
+   the box, no domain setup needed, and can send to anyone.
+5. *(Optional, nicer-looking emails)* In Resend: **Domains → Add Domain**, add `dataart.com` (or
+   a subdomain like `mail.dataart.com`) and the DNS records it gives you (SPF/DKIM — your
+   infra/DNS admin can add these as TXT/CNAME records). Once verified, set the `FROM_EMAIL`
+   Railway variable to something like `Every Day Is Like Sunday <noreply@dataart.com>`.
+
+**Environment variables** (set in Railway → service → Variables):
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `RESEND_API_KEY` | *(none)* | Required to actually send sign-in emails. Without it, links are only logged to the server console — fine for testing, not for real use. |
+| `ALLOWED_EMAIL_DOMAINS` | `dataart.com` | Comma-separated list of domains allowed to sign in, e.g. `dataart.com,partner.com`. |
+| `FROM_EMAIL` | `Every Day Is Like Sunday <onboarding@resend.dev>` | Sender shown on the email. Needs a Resend-verified domain to use your own address. |
+| `APP_BASE_URL` | *(derived from the request)* | The public URL Railway gives the service, e.g. `https://every-day-is-like-sunday.up.railway.app`. **Set this explicitly in production** — without it, the link emailed to people is built from the incoming request's `Host` header, which isn't a value to trust for something that ends up in an email. |
+
+This is sign-in, not a full account system: there's no admin panel, no way to revoke one
+person's access without rotating everyone's sessions (short of editing `data/sessions.json`
+by hand), and anyone on the allowed domain(s) can get in. That matches "keep random people off
+the internet from using this," not "fine-grained permissions" — good enough until/unless this
+moves behind the company's actual intranet or SSO.
 
 ## Deploy to Railway
 
 1. Push this folder to a GitHub repo (or use the Railway CLI directly, see below).
 2. In Railway: **New Project → Deploy from GitHub repo**, pick the repo.
    Railway's Nixpacks builder auto-detects Node from `package.json` and runs `npm start`.
-   No extra configuration is needed — no database, no env vars.
-3. Once deployed, Railway gives you a public URL (or attach your own domain in the project's
-   Settings → Domains).
+3. Add the environment variables from the table above (`RESEND_API_KEY` at minimum).
+4. Once deployed, Railway gives you a public URL (or attach your own domain in the project's
+   Settings → Domains) — set that as `APP_BASE_URL`.
 
 Or, with the [Railway CLI](https://docs.railway.com/guides/cli) from inside this folder:
 
@@ -50,16 +86,18 @@ railway init
 railway up
 ```
 
-## Persisting events
+## Persisting data
 
-Events are written to `data/events.json` (path overridable via the `DATA_DIR` env var).
-Railway's default filesystem is **ephemeral** — it's wiped on every redeploy — so without
-extra setup, added events will disappear next time you push. To keep them:
+Events, sessions and display names are written to `data/*.json` (directory overridable via the
+`DATA_DIR` env var). Railway's default filesystem is **ephemeral** — it's wiped on every
+redeploy — so without extra setup, events disappear and everyone gets signed out on each
+redeploy. To keep them:
 
 1. In the Railway project, add a **Volume** to the service and mount it at e.g. `/data`.
 2. Set the service's `DATA_DIR` environment variable to that mount path (`/data`).
 
-Without a volume, treat the calendar as holidays-only and events as best-effort/temporary.
+Without a volume, treat events as best-effort/temporary and expect to sign in again after a
+redeploy (sign-in itself still works fine either way — only the *session* is lost).
 
 ## Updating UAE/India holidays
 

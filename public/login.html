@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in — Every Day Is Like Sunday</title>
+<script>
+  (function () {
+    try {
+      var t = JSON.parse(localStorage.getItem("hs_theme_v1"));
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  })();
+</script>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --border: #e3e6ea; --text: #1b1f24; --text-dim: #6b7280;
+    --accent: #2f6fed; --accent-weak: #eaf0fe; --busy-bg: #fff6ea; --busy-border: #f3dbab;
+    --shadow: 0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.06); --radius: 12px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1216; --panel: #171b21; --border: #272c34; --text: #e7e9ec; --text-dim: #9aa2ad;
+      --accent: #5b8cff; --accent-weak: #1b2740; --busy-bg: #2a2212; --busy-border: #4a3a16;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 1px 3px rgba(0,0,0,.4);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1216; --panel: #171b21; --border: #272c34; --text: #e7e9ec; --text-dim: #9aa2ad;
+    --accent: #5b8cff; --accent-weak: #1b2740; --busy-bg: #2a2212; --busy-border: #4a3a16;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 1px 3px rgba(0,0,0,.4);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 14px; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 16px;
+  }
+  .card {
+    width: 360px; max-width: 100%; background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius); box-shadow: var(--shadow); padding: 24px;
+  }
+  .card h1 { font-size: 18px; margin: 0 0 4px; }
+  .card p { color: var(--text-dim); font-size: 13px; margin: 0 0 16px; line-height: 1.5; }
+  input[type="email"] {
+    width: 100%; padding: 9px 11px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--text); font-size: 14px;
+  }
+  button {
+    width: 100%; margin-top: 10px; padding: 9px 11px; border-radius: 8px; border: 1px solid var(--accent);
+    background: var(--accent); color: #fff; font-size: 14px; cursor: pointer;
+  }
+  button:disabled { opacity: .6; cursor: default; }
+  .msg { margin-top: 12px; font-size: 12.5px; line-height: 1.5; }
+  .msg.error { color: #d1453b; }
+  .msg.success { color: var(--text); background: var(--accent-weak); border-radius: 8px; padding: 10px 12px; }
+  .footnote { margin-top: 16px; color: var(--text-dim); font-size: 11.5px; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>Every Day Is Like Sunday</h1>
+    <p>Sign in with your company email to see and plan around the holiday calendar.</p>
+    <form id="form">
+      <input type="email" id="email" placeholder="you@dataart.com" autocomplete="email" required autofocus>
+      <button type="submit" id="submitBtn">Send sign-in link</button>
+    </form>
+    <div id="msg" class="msg"></div>
+    <div class="footnote">We'll email you a one-time link — no password needed.</div>
+  </div>
+<script>
+(function () {
+  "use strict";
+  var form = document.getElementById("form");
+  var emailInput = document.getElementById("email");
+  var submitBtn = document.getElementById("submitBtn");
+  var msg = document.getElementById("msg");
+
+  var params = new URLSearchParams(window.location.search);
+  if (params.get("error") === "expired") {
+    msg.className = "msg error";
+    msg.textContent = "That link expired or was already used. Request a new one below.";
+  }
+
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var email = emailInput.value.trim();
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Sending…";
+    msg.className = "msg";
+    msg.textContent = "";
+    fetch("/api/auth/request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email }),
+    }).then(function (r) {
+      return r.json().then(function (data) { return { ok: r.ok, data: data }; });
+    }).then(function (res) {
+      if (res.ok) {
+        msg.className = "msg success";
+        msg.textContent = res.data.devMode
+          ? "Email sending isn't configured yet (no RESEND_API_KEY) — check the server logs for your sign-in link."
+          : "Check " + email + " for a sign-in link. It expires in 15 minutes.";
+        form.style.display = "none";
+      } else {
+        msg.className = "msg error";
+        msg.textContent = res.data.error || "Something went wrong.";
+      }
+    }).catch(function () {
+      msg.className = "msg error";
+      msg.textContent = "Network error — please try again.";
+    }).then(function () {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Send sign-in link";
+    });
+  });
+})();
+</script>
+</body>
+</html>

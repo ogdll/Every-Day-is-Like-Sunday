@@ -245,6 +245,7 @@
     </div>
     <div style="display:flex; gap:8px;">
       <button class="theme-toggle" id="userBtn" title="Set your display name"></button>
+      <button class="theme-toggle" id="signOutBtn" title="Sign out">Sign out</button>
       <button class="theme-toggle" id="themeToggle" title="Toggle light/dark theme"></button>
     </div>
   </header>
@@ -393,16 +394,27 @@
     });
   }
 
-  // ---- User identity (name-only, not real auth — just who the UI treats as the owner) ----
-  var LS_USER = "hs_user_name_v1";
+  // ---- User identity (verified via /api/auth, session cookie is authoritative;
+  //      the display name here is just cosmetic and lives server-side per email) ----
+  var profile = { email: "", name: "" };
   var pendingNameCallback = null;
-  function currentUserName() {
-    return (loadJSON(LS_USER, "") || "").trim();
+
+  function handleAuthRedirect(r) {
+    if (r.status === 401) { window.location.href = "/login.html"; return true; }
+    return false;
+  }
+  function loadProfile() {
+    return fetch("/api/profile").then(function (r) {
+      if (handleAuthRedirect(r)) return null;
+      return r.ok ? r.json() : null;
+    }).then(function (data) {
+      if (data) { profile = data; updateUserButton(); }
+      return data;
+    }).catch(function () { return null; });
   }
   function updateUserButton() {
     var btn = document.getElementById("userBtn");
-    var name = currentUserName();
-    btn.textContent = name ? "👤 " + name : "👤 Set name";
+    btn.textContent = profile.name ? "👤 " + profile.name : "👤 " + (profile.email || "Set name");
   }
   function showNameModal() {
     document.getElementById("nameModal").classList.add("open");
@@ -415,21 +427,34 @@
   }
   function openNameModal(callback) {
     pendingNameCallback = callback || null;
-    document.getElementById("nameInput").value = currentUserName();
+    document.getElementById("nameInput").value = profile.name || "";
     showNameModal();
     document.getElementById("nameInput").focus();
   }
   function saveNameModal() {
     var val = document.getElementById("nameInput").value.trim();
     if (!val) { document.getElementById("nameInput").focus(); return; }
-    saveJSON(LS_USER, val);
-    updateUserButton();
-    renderCalendar(currentMonthHolidayMap);
-    var cb = pendingNameCallback;
-    pendingNameCallback = null;
-    document.getElementById("nameModal").classList.remove("open");
-    document.getElementById("nameModalBackdrop").classList.remove("show");
-    if (cb) cb(val);
+    fetch("/api/profile", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: val }),
+    }).then(function (r) {
+      if (handleAuthRedirect(r)) return null;
+      return r.ok ? r.json() : Promise.reject(new Error("Could not save your name."));
+    }).then(function (data) {
+      if (!data) return;
+      profile = data;
+      updateUserButton();
+      document.getElementById("nameModal").classList.remove("open");
+      document.getElementById("nameModalBackdrop").classList.remove("show");
+      return loadEventsFromServer().then(function () {
+        renderCalendar(currentMonthHolidayMap);
+        var cb = pendingNameCallback;
+        pendingNameCallback = null;
+        if (cb) cb();
+      });
+    }).catch(function (err) {
+      alert(err.message || "Could not save your name.");
+    });
   }
   function setupNameModal() {
     document.getElementById("userBtn").addEventListener("click", function () { openNameModal(null); });
@@ -442,10 +467,16 @@
       if (e.key === "Escape") closeNameModal();
     });
   }
-  // Runs callback(name) once a name is known, opening the name modal first if needed.
+  function signOut() {
+    fetch("/api/auth/logout", { method: "POST" }).then(function () {
+      window.location.href = "/login.html";
+    }).catch(function () {
+      window.location.href = "/login.html";
+    });
+  }
+  // Runs callback() once a display name is known, opening the name modal first if needed.
   function withUserName(callback) {
-    var name = currentUserName();
-    if (name) { callback(name); return; }
+    if (profile.name) { callback(); return; }
     openNameModal(callback);
   }
 
@@ -642,10 +673,10 @@
       var row = document.createElement("label");
       row.className = "country-row";
       row.innerHTML =
-        '<input type="checkbox" data-code="' + code + '" ' + (isSelected(code) ? "checked" : "") + '>' +
+        '<input type="checkbox" data-code="' + escapeHtml(code) + '" ' + (isSelected(code) ? "checked" : "") + '>' +
         '<span class="flag">' + flagForCode(code) + "</span>" +
-        '<span class="country-name">' + (countryNameByCode[code] || code) + "</span>" +
-        '<button class="remove-btn" data-code="' + code + '" title="Remove">×</button>';
+        '<span class="country-name">' + escapeHtml(countryNameByCode[code] || code) + "</span>" +
+        '<button class="remove-btn" data-code="' + escapeHtml(code) + '" title="Remove">×</button>';
       el.appendChild(row);
     });
     el.querySelectorAll("input[type=checkbox]").forEach(function (cb) {
@@ -684,8 +715,8 @@
         results.innerHTML = '<div class="search-result-item">No match</div>';
       } else {
         results.innerHTML = matches.map(function (c) {
-          return '<div class="search-result-item" data-code="' + c.countryCode + '">' +
-            flagForCode(c.countryCode) + " " + c.name + "</div>";
+          return '<div class="search-result-item" data-code="' + escapeHtml(c.countryCode) + '">' +
+            flagForCode(c.countryCode) + " " + escapeHtml(c.name) + "</div>";
         }).join("");
       }
       results.classList.add("show");
@@ -720,6 +751,7 @@
   }
   function loadEventsFromServer() {
     return fetch("/api/events").then(function (r) {
+      if (handleAuthRedirect(r)) return [];
       return r.ok ? r.json() : [];
     }).then(function (data) {
       allEvents = Array.isArray(data) ? data : [];
@@ -755,7 +787,7 @@
       modalEventId = ev.id;
       document.getElementById("eventModalTitle").textContent = "Edit event";
       document.getElementById("eventTitleInput").value = ev.title;
-      document.getElementById("eventModalOwner").textContent = "Added by " + ev.owner;
+      document.getElementById("eventModalOwner").textContent = "Added by " + ev.ownerName;
       document.getElementById("eventDeleteBtn").style.display = "inline-block";
     }
     document.getElementById("eventModalDate").textContent =
@@ -766,20 +798,22 @@
   function saveEventModal() {
     var title = document.getElementById("eventTitleInput").value.trim();
     if (!title) { document.getElementById("eventTitleInput").focus(); return; }
-    withUserName(function (owner) {
+    withUserName(function () {
       var req = modalMode === "add"
         ? fetch("/api/events", {
             method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ date: modalDate, title: title, owner: owner })
+            body: JSON.stringify({ date: modalDate, title: title })
           })
         : fetch("/api/events/" + modalEventId, {
             method: "PUT", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ title: title, owner: owner })
+            body: JSON.stringify({ title: title })
           });
       req.then(function (r) {
+        if (handleAuthRedirect(r)) return null;
         if (!r.ok) return r.json().then(function (e) { throw new Error(e.error || "Request failed"); });
         return r.json();
-      }).then(function () {
+      }).then(function (result) {
+        if (!result) return;
         closeEventModal();
         return loadEventsFromServer();
       }).then(function () {
@@ -790,13 +824,12 @@
     });
   }
   function performDeleteEvent() {
-    var owner = currentUserName();
-    fetch("/api/events/" + modalEventId, {
-      method: "DELETE", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ owner: owner })
-    }).then(function (r) {
+    fetch("/api/events/" + modalEventId, { method: "DELETE" }).then(function (r) {
+      if (handleAuthRedirect(r)) return false;
       if (!r.ok && r.status !== 204) return r.json().then(function (e) { throw new Error(e.error || "Request failed"); });
-    }).then(function () {
+      return true;
+    }).then(function (ok) {
+      if (!ok) return;
       closeEventModal();
       return loadEventsFromServer();
     }).then(function () {
@@ -910,18 +943,16 @@
 
         var namesHtml = hs.slice(0, 4).map(function (h) {
           var nm = countryNameByCode[h.code] || h.code;
-          var nameTitle = h.localName ? ' title="' + h.localName.replace(/"/g, "&quot;") + '"' : "";
-          return '<div><span class="flag-wrap" title="' + nm.replace(/"/g, "&quot;") + '">' + flagForCode(h.code) + '</span> <span' + nameTitle + '>' + h.name + '</span></div>';
+          var nameTitle = h.localName ? ' title="' + escapeHtml(h.localName) + '"' : "";
+          return '<div><span class="flag-wrap" title="' + escapeHtml(nm) + '">' + flagForCode(h.code) + '</span> <span' + nameTitle + '>' + escapeHtml(h.name) + '</span></div>';
         }).join("");
         if (hs.length > 4) namesHtml += '<div>+' + (hs.length - 4) + ' more</div>';
 
         var evs = eventsByDate[dateStr] || [];
-        var myName = currentUserName();
         var eventsHtml = evs.map(function (ev) {
-          var mine = !!myName && ev.owner === myName;
-          var ownerTitle = "Added by " + escapeHtml(ev.owner);
-          var editAttr = mine ? ' data-edit-id="' + ev.id + '"' : "";
-          return '<div class="event-row' + (mine ? " mine" : "") + '">' +
+          var ownerTitle = "Added by " + escapeHtml(ev.ownerName);
+          var editAttr = ev.mine ? ' data-edit-id="' + ev.id + '"' : "";
+          return '<div class="event-row' + (ev.mine ? " mine" : "") + '">' +
             '<span class="event-title" title="' + ownerTitle + '"' + editAttr + '>' + escapeHtml(ev.title) + "</span></div>";
         }).join("");
 
@@ -939,7 +970,7 @@
     legend.innerHTML = selected.map(function (code) {
       var nm = countryNameByCode[code] || code;
       var wd = workingDaysInMonth(code, y, m);
-      return '<span title="' + nm.replace(/"/g, "&quot;") + '">' + flagForCode(code) + " (" + wd + ")</span>";
+      return '<span title="' + escapeHtml(nm) + '">' + flagForCode(code) + " (" + wd + ")</span>";
     }).join("") + '<span><span class="box" style="background:var(--free-bg);border:1px solid var(--free-border)"></span>No holidays (selected countries)</span>';
   }
 
@@ -999,8 +1030,8 @@
     ul.innerHTML = items.map(function (it) {
       var pills = it.entries.map(function (h) {
         var nm = countryNameByCode[h.code] || h.code;
-        var nameTitle = h.localName ? ' title="' + h.localName.replace(/"/g, "&quot;") + '"' : "";
-        return '<span class="pill"><span title="' + nm.replace(/"/g, "&quot;") + '">' + flagForCode(h.code) + '</span> <span' + nameTitle + '>' + h.name + "</span></span>";
+        var nameTitle = h.localName ? ' title="' + escapeHtml(h.localName) + '"' : "";
+        return '<span class="pill"><span title="' + escapeHtml(nm) + '">' + flagForCode(h.code) + '</span> <span' + nameTitle + '>' + escapeHtml(h.name) + "</span></span>";
       }).join("");
       return "<li><span class=\"u-date\">" + it.dt.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) +
         "</span><span class=\"u-countries\">" + pills + "</span></li>";
@@ -1039,6 +1070,8 @@
     updateUserButton();
     setupNameModal();
     setupEventModal();
+    loadProfile();
+    document.getElementById("signOutBtn").addEventListener("click", signOut);
     renderOfficeList();
     renderCustomList();
     setupCountrySearch();
