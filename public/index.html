@@ -3,7 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Holiday Scheduler — DataArt</title>
+<title>Every Day Is Like Sunday</title>
+<script>
+  (function () {
+    try {
+      var t = JSON.parse(localStorage.getItem("hs_theme_v1"));
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  })();
+</script>
 <style>
   :root {
     --bg: #f6f7f9;
@@ -23,7 +31,7 @@
     --radius: 12px;
   }
   @media (prefers-color-scheme: dark) {
-    :root {
+    :root:not([data-theme="light"]) {
       --bg: #0f1216;
       --panel: #171b21;
       --border: #272c34;
@@ -40,6 +48,22 @@
       --shadow: 0 1px 2px rgba(0,0,0,.3), 0 1px 3px rgba(0,0,0,.4);
     }
   }
+  :root[data-theme="dark"] {
+    --bg: #0f1216;
+    --panel: #171b21;
+    --border: #272c34;
+    --text: #e7e9ec;
+    --text-dim: #9aa2ad;
+    --accent: #5b8cff;
+    --accent-weak: #1b2740;
+    --weekend-bg: #1b1f26;
+    --free-bg: #12261a;
+    --free-border: #1f4a2d;
+    --busy-bg: #2a2212;
+    --busy-border: #4a3a16;
+    --today-ring: #5b8cff;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 1px 3px rgba(0,0,0,.4);
+  }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
   body {
@@ -51,9 +75,14 @@
   }
   #app { max-width: 1480px; margin: 0 auto; padding: 20px 16px 60px; }
 
-  header.top { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 18px; }
+  header.top { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 18px; }
   header.top h1 { font-size: 20px; margin: 0; }
   header.top p { margin: 2px 0 0; color: var(--text-dim); font-size: 13px; }
+  .theme-toggle {
+    border: 1px solid var(--border); background: var(--panel); color: var(--text);
+    border-radius: 8px; padding: 7px 11px; cursor: pointer; font-size: 13px; flex: none;
+  }
+  .theme-toggle:hover { border-color: var(--accent); }
 
   .drawer-backdrop {
     position: fixed; inset: 0; background: rgba(10,12,16,.4); opacity: 0; pointer-events: none;
@@ -171,9 +200,10 @@
 <div id="app">
   <header class="top">
     <div>
-      <h1>Holiday Scheduler</h1>
+      <h1>Every Day Is Like Sunday</h1>
       <p>Find dates when none of your selected countries have a public holiday — live data per country.</p>
     </div>
+    <button class="theme-toggle" id="themeToggle" title="Toggle light/dark theme">Theme</button>
   </header>
 
   <div class="drawer-backdrop" id="drawerBackdrop"></div>
@@ -242,7 +272,7 @@
 
   <footer class="note">
     Live data from <a href="https://date.nager.at" target="_blank" rel="noopener">date.nager.at</a>.
-    United Arab Emirates and India aren't covered by that source — their holidays come from
+    🇦🇪 United Arab Emirates and 🇮🇳 India aren't covered by that source — their holidays come from
     <code>custom-holidays.json</code> in this project (fixed-date holidays only; movable ones like Eid or Diwali
     need to be added by hand each year — see the file's <code>_readme</code>).
   </footer>
@@ -251,6 +281,36 @@
 <script>
 (function () {
   "use strict";
+
+  // ---- Theme (light/dark, manual override persisted over the system preference) ----
+  var LS_THEME = "hs_theme_v1";
+  function applyTheme(theme) {
+    if (theme === "light" || theme === "dark") {
+      document.documentElement.setAttribute("data-theme", theme);
+    } else {
+      document.documentElement.removeAttribute("data-theme");
+    }
+  }
+  function systemPrefersDark() {
+    return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+  }
+  function effectiveTheme() {
+    return document.documentElement.getAttribute("data-theme") || (systemPrefersDark() ? "dark" : "light");
+  }
+  function updateThemeButton(btn) {
+    btn.textContent = effectiveTheme() === "dark" ? "🌙 Theme" : "☀️ Theme";
+  }
+  function setupThemeToggle() {
+    var btn = document.getElementById("themeToggle");
+    applyTheme(loadJSON(LS_THEME, null));
+    updateThemeButton(btn);
+    btn.addEventListener("click", function () {
+      var next = effectiveTheme() === "dark" ? "light" : "dark";
+      applyTheme(next);
+      saveJSON(LS_THEME, next);
+      updateThemeButton(btn);
+    });
+  }
 
   // ---- Default office countries (DataArt offices, from dataart.com/contact-us) ----
   var OFFICES = [
@@ -700,6 +760,7 @@
 
   // ---- Wiring ----
   function init() {
+    setupThemeToggle();
     renderOfficeList();
     renderCustomList();
     setupCountrySearch();

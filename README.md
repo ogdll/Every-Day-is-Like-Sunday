@@ -1,7 +1,8 @@
-# Holiday Scheduler
+# Every Day Is Like Sunday
 
 Internal tool for the comms team: a calendar of public holidays across all DataArt office
-countries, so you can find dates when nobody is out.
+countries, so you can find dates when nobody is out. Named after the Morrissey song — the goal
+is a calendar where, ideally, every working day looks as quiet as a Sunday.
 
 - Default countries = DataArt offices (from dataart.com/contact-us): US, Mexico, UK, Switzerland,
   Germany, Cyprus, Latvia, Poland, Romania, Serbia, Bulgaria, Ukraine, Georgia, Armenia,
