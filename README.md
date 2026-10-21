@@ -14,6 +14,14 @@ is a calendar where, ideally, every working day looks as quiet as a Sunday.
   like Eid or Diwali).
 - "Next holiday-free weekdays" and the calendar highlight days when **none** of the selected
   countries have a holiday — that's the window to schedule activities in.
+- Anyone can add their own **events** to a day (click "+ event" on a cell, or an existing event
+  to edit it). Everyone sees all events; only the person who added one can edit or delete it.
+  Ownership is just a display name typed into the app (top-right "👤" button) — there's no
+  login, so it's a convention enforced by the UI and the API, not real authentication. Good
+  enough for a trusted internal team; don't rely on it if the deployed URL isn't private.
+- Events are stored server-side (not per-browser) in a JSON file, via a tiny API in `server.js`
+  (`/api/events`), so everyone on the team sees the same calendar. See "Persisting events" below
+  for what this means on Railway.
 
 No build step, no framework, no dependencies — static HTML/CSS/JS served by a tiny Node server.
 
@@ -41,6 +49,17 @@ railway login
 railway init
 railway up
 ```
+
+## Persisting events
+
+Events are written to `data/events.json` (path overridable via the `DATA_DIR` env var).
+Railway's default filesystem is **ephemeral** — it's wiped on every redeploy — so without
+extra setup, added events will disappear next time you push. To keep them:
+
+1. In the Railway project, add a **Volume** to the service and mount it at e.g. `/data`.
+2. Set the service's `DATA_DIR` environment variable to that mount path (`/data`).
+
+Without a volume, treat the calendar as holidays-only and events as best-effort/temporary.
 
 ## Updating UAE/India holidays
 
