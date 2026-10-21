@@ -203,7 +203,7 @@
       <h1>Every Day Is Like Sunday</h1>
       <p>Find dates when none of your selected countries have a public holiday — live data per country.</p>
     </div>
-    <button class="theme-toggle" id="themeToggle" title="Toggle light/dark theme">Theme</button>
+    <button class="theme-toggle" id="themeToggle" title="Toggle light/dark theme"></button>
   </header>
 
   <div class="drawer-backdrop" id="drawerBackdrop"></div>
@@ -298,7 +298,7 @@
     return document.documentElement.getAttribute("data-theme") || (systemPrefersDark() ? "dark" : "light");
   }
   function updateThemeButton(btn) {
-    btn.textContent = effectiveTheme() === "dark" ? "🌙 Theme" : "☀️ Theme";
+    btn.textContent = effectiveTheme() === "dark" ? "🌙" : "☀️";
   }
   function setupThemeToggle() {
     var btn = document.getElementById("themeToggle");
