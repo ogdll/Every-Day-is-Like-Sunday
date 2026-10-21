@@ -38,7 +38,8 @@ const PROFILES_FILE = path.join(DATA_DIR, 'profiles.json');
 const MAX_BODY_BYTES = 20 * 1024;
 const MAX_TITLE_LEN = 200;
 const MAX_NAME_LEN = 80;
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const MIN_EVENT_MS = 5 * 60 * 1000;
+const MAX_EVENT_MS = 24 * 60 * 60 * 1000;
 
 const APP_NAME = 'Every Day Is Like Sunday';
 const SESSION_COOKIE = 'edils_session';
@@ -360,45 +361,60 @@ function handleProfileApi(req, res, session) {
 }
 
 // ---- Events API (ownership is the verified session email, not client input) ----
+// Events are stored as absolute UTC instants (startAt/endAt, ISO 8601). Which
+// calendar day and what local time they fall on is computed per viewer, client-side.
 function resolveOwnerName(email, profiles) {
   if (!email) return 'Unknown';
   return (profiles[email] && profiles[email].name) || String(email).split('@')[0];
 }
 
+function parseEventTimes(body) {
+  const startAt = new Date(cleanString(body.startAt, 40));
+  const endAt = new Date(cleanString(body.endAt, 40));
+  if (isNaN(startAt.getTime()) || isNaN(endAt.getTime())) return { error: 'Invalid start/end time' };
+  const durationMs = endAt.getTime() - startAt.getTime();
+  if (durationMs < MIN_EVENT_MS) return { error: 'Event must be at least 5 minutes long' };
+  if (durationMs > MAX_EVENT_MS) return { error: 'Event can be at most 24 hours long' };
+  return { startAt: startAt.toISOString(), endAt: endAt.toISOString() };
+}
+
+function serializeEvent(e, profiles, session) {
+  return {
+    id: e.id, title: e.title, startAt: e.startAt, endAt: e.endAt,
+    ownerEmail: e.ownerEmail,
+    ownerName: resolveOwnerName(e.ownerEmail, profiles),
+    mine: e.ownerEmail === session.email,
+  };
+}
+
 function handleEventsApi(req, res, parts, session) {
   if (parts.length === 2 && req.method === 'GET') {
     const profiles = loadProfiles();
-    const events = loadEvents().map((e) => ({
-      id: e.id, date: e.date, title: e.title,
-      ownerEmail: e.ownerEmail || null,
-      ownerName: e.ownerEmail ? resolveOwnerName(e.ownerEmail, profiles) : (e.owner || 'Unknown'),
-      mine: !!e.ownerEmail && e.ownerEmail === session.email,
-    }));
+    const events = loadEvents()
+      .filter((e) => e.startAt && e.endAt)
+      .map((e) => serializeEvent(e, profiles, session));
     return sendJSON(res, 200, events);
   }
 
   if (parts.length === 2 && req.method === 'POST') {
     return readBody(req, (err, body) => {
       if (err) return sendJSON(res, 400, { error: err.message });
-      const date = cleanString(body.date, 10);
       const title = cleanString(body.title, MAX_TITLE_LEN);
-      if (!DATE_RE.test(date)) return sendJSON(res, 400, { error: 'Invalid date' });
       if (!title) return sendJSON(res, 400, { error: 'Title is required' });
+      const times = parseEventTimes(body);
+      if (times.error) return sendJSON(res, 400, { error: times.error });
 
       const events = loadEvents();
       const event = {
         id: crypto.randomUUID(),
-        date, title,
+        title, startAt: times.startAt, endAt: times.endAt,
         ownerEmail: session.email,
         createdAt: new Date().toISOString(),
       };
       events.push(event);
       saveEvents(events);
       const profiles = loadProfiles();
-      return sendJSON(res, 201, {
-        id: event.id, date: event.date, title: event.title,
-        ownerEmail: event.ownerEmail, ownerName: resolveOwnerName(event.ownerEmail, profiles), mine: true,
-      });
+      return sendJSON(res, 201, serializeEvent(event, profiles, session));
     });
   }
 
@@ -408,19 +424,18 @@ function handleEventsApi(req, res, parts, session) {
       if (err) return sendJSON(res, 400, { error: err.message });
       const title = cleanString(body.title, MAX_TITLE_LEN);
       if (!title) return sendJSON(res, 400, { error: 'Title is required' });
+      const times = parseEventTimes(body);
+      if (times.error) return sendJSON(res, 400, { error: times.error });
 
       const events = loadEvents();
       const idx = events.findIndex((e) => e.id === id);
       if (idx === -1) return sendJSON(res, 404, { error: 'Not found' });
       if (events[idx].ownerEmail !== session.email) return sendJSON(res, 403, { error: 'Only the owner can edit this event' });
 
-      events[idx] = { ...events[idx], title, updatedAt: new Date().toISOString() };
+      events[idx] = { ...events[idx], title, startAt: times.startAt, endAt: times.endAt, updatedAt: new Date().toISOString() };
       saveEvents(events);
       const profiles = loadProfiles();
-      return sendJSON(res, 200, {
-        id: events[idx].id, date: events[idx].date, title: events[idx].title,
-        ownerEmail: events[idx].ownerEmail, ownerName: resolveOwnerName(events[idx].ownerEmail, profiles), mine: true,
-      });
+      return sendJSON(res, 200, serializeEvent(events[idx], profiles, session));
     });
   }
 

@@ -4,3 +4,4 @@ node_modules/
 .env
 .env.*
 !.env.example
+.claude/scheduled_tasks.lock

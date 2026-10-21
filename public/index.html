@@ -83,6 +83,10 @@
     border-radius: 8px; padding: 7px 11px; cursor: pointer; font-size: 13px; flex: none;
   }
   .theme-toggle:hover { border-color: var(--accent); }
+  .tz-label {
+    border: 1px solid var(--border); background: var(--panel); color: var(--text-dim);
+    border-radius: 8px; padding: 7px 11px; font-size: 13px; cursor: default; white-space: nowrap;
+  }
 
   .drawer-backdrop {
     position: fixed; inset: 0; background: rgba(10,12,16,.4); opacity: 0; pointer-events: none;
@@ -130,6 +134,38 @@
     border-radius: 8px; padding: 7px 11px; cursor: pointer; font-size: 13px;
   }
   .danger-btn:hover { border-color: #d1453b; }
+
+  .dayview-modal { width: 480px; max-width: 94vw; }
+  .dayview-grid-wrap {
+    max-height: 360px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px;
+    margin: 8px 0; position: relative;
+  }
+  .dayview-grid { position: relative; }
+  .dv-hour-row { position: absolute; left: 0; right: 0; border-top: 1px solid var(--border); }
+  .dv-hour-label {
+    position: absolute; top: -7px; left: 4px; font-size: 10px; color: var(--text-dim);
+    background: var(--panel); padding: 0 3px; pointer-events: none;
+  }
+  .dv-events-layer { position: absolute; inset: 0; left: 50px; cursor: pointer; }
+  .dv-block {
+    position: absolute; left: 2px; right: 2px; border-radius: 6px; padding: 2px 6px; font-size: 11px;
+    overflow: hidden; line-height: 1.3; cursor: default;
+  }
+  .dv-block.other { background: var(--weekend-bg); border: 1px solid var(--border); color: var(--text-dim); }
+  .dv-block.mine { background: var(--accent-weak); border: 1px solid var(--accent); color: var(--text); cursor: pointer; }
+  .dv-block.mine:hover { filter: brightness(1.08); }
+  .dv-block.dv-preview { background: var(--accent); color: #fff; border: none; opacity: .85; pointer-events: none; }
+  .dv-block-time { font-weight: 600; margin-right: 4px; }
+  .dayview-form { margin-top: 4px; }
+  .dayview-form input[type="text"] {
+    width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--text); font-size: 14px;
+  }
+  .dayview-time-row { display: flex; gap: 8px; margin-top: 8px; }
+  .dayview-time-row input[type="time"], .dayview-time-row select {
+    flex: 1; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--text); font-size: 14px;
+  }
 
   .panel {
     background: var(--panel);
@@ -206,6 +242,7 @@
     overflow: hidden; text-overflow: ellipsis; cursor: default;
   }
   .event-row.mine .event-title { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
+  .event-time { color: var(--text-dim); font-variant-numeric: tabular-nums; }
   .add-event-btn {
     display: block; margin-top: 4px; font-size: 10px; color: var(--text-dim); background: none;
     border: none; padding: 0; cursor: pointer; opacity: .55;
@@ -243,7 +280,8 @@
       <h1>Every Day Is Like Sunday</h1>
       <p>Find dates when none of your selected countries have a public holiday — live data per country.</p>
     </div>
-    <div style="display:flex; gap:8px;">
+    <div style="display:flex; gap:8px; align-items:center;">
+      <span class="tz-label" id="tzLabel" title=""></span>
       <button class="theme-toggle" id="userBtn" title="Set your display name"></button>
       <button class="theme-toggle" id="signOutBtn" title="Sign out">Sign out</button>
       <button class="theme-toggle" id="themeToggle" title="Toggle light/dark theme"></button>
@@ -321,20 +359,37 @@
     need to be added by hand each year — see the file's <code>_readme</code>).
   </footer>
 
-  <div class="modal-backdrop" id="eventModalBackdrop"></div>
-  <div class="modal" id="eventModal">
+  <div class="modal-backdrop" id="dayViewBackdrop"></div>
+  <div class="modal dayview-modal" id="dayViewModal">
     <div class="modal-header">
-      <h2 id="eventModalTitle">Add event</h2>
-      <button class="drawer-close" id="eventModalClose" title="Close">×</button>
+      <h2 id="dayViewTitle">Monday, October 19</h2>
+      <button class="drawer-close" id="dayViewClose" title="Close">×</button>
     </div>
-    <div class="modal-date" id="eventModalDate"></div>
-    <input type="text" id="eventTitleInput" maxlength="200" placeholder="Event title…" autocomplete="off">
-    <div class="modal-owner" id="eventModalOwner"></div>
-    <div class="modal-actions">
-      <button class="danger-btn" id="eventDeleteBtn" style="display:none;">Delete</button>
-      <div class="spacer"></div>
-      <button class="nav-btn" id="eventCancelBtn">Cancel</button>
-      <button class="refresh-btn" id="eventSaveBtn">Save</button>
+    <div class="dayview-grid-wrap">
+      <div class="dayview-grid" id="dayViewGrid"></div>
+    </div>
+    <div class="dayview-form">
+      <input type="text" id="dvTitleInput" maxlength="200" placeholder="Event title…" autocomplete="off">
+      <div class="dayview-time-row">
+        <input type="time" id="dvStartInput" step="900">
+        <select id="dvDurationInput">
+          <option value="15">15 min</option>
+          <option value="30">30 min</option>
+          <option value="45">45 min</option>
+          <option value="60" selected>1 hour</option>
+          <option value="90">1.5 hours</option>
+          <option value="120">2 hours</option>
+          <option value="180">3 hours</option>
+          <option value="240">4 hours</option>
+        </select>
+      </div>
+      <div class="modal-owner" id="dvOwnerLine"></div>
+      <div class="modal-actions">
+        <button class="danger-btn" id="dvDeleteBtn" style="display:none;">Delete</button>
+        <div class="spacer"></div>
+        <button class="nav-btn" id="dvCancelBtn">Cancel</button>
+        <button class="refresh-btn" id="dvSaveBtn">Save</button>
+      </div>
     </div>
   </div>
 
@@ -740,13 +795,31 @@
   }
 
   // ---- Events (shared, server-stored; see server.js /api/events) ----
+  // Stored as absolute UTC instants (startAt/endAt). Which local day and time they
+  // fall on is computed per viewer from the browser's own timezone — never assume
+  // the creator's timezone equals the viewer's.
   var allEvents = [];
   var eventsByDate = {};
+
+  function localDateKey(d) {
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  }
+  function localDateKeyFromISO(iso) {
+    return localDateKey(new Date(iso));
+  }
+  function fmtEventTime(iso) {
+    var d = new Date(iso);
+    return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+  }
   function rebuildEventsByDate() {
     eventsByDate = {};
     allEvents.forEach(function (ev) {
-      if (!eventsByDate[ev.date]) eventsByDate[ev.date] = [];
-      eventsByDate[ev.date].push(ev);
+      var key = localDateKeyFromISO(ev.startAt);
+      if (!eventsByDate[key]) eventsByDate[key] = [];
+      eventsByDate[key].push(ev);
+    });
+    Object.keys(eventsByDate).forEach(function (k) {
+      eventsByDate[k].sort(function (a, b) { return new Date(a.startAt) - new Date(b.startAt); });
     });
   }
   function loadEventsFromServer() {
@@ -759,109 +832,235 @@
     }).catch(function () {});
   }
 
-  var modalMode = null, modalDate = null, modalEventId = null;
-  function showEventModal() {
-    document.getElementById("eventModal").classList.add("open");
-    document.getElementById("eventModalBackdrop").classList.add("show");
+  function tzInfo() {
+    var tz = (Intl.DateTimeFormat().resolvedOptions().timeZone) || "";
+    var offsetMin = -new Date().getTimezoneOffset();
+    var sign = offsetMin >= 0 ? "+" : "-";
+    var abs = Math.abs(offsetMin);
+    var h = Math.floor(abs / 60), m = abs % 60;
+    var offsetStr = "UTC" + sign + h + (m ? ":" + String(m).padStart(2, "0") : "");
+    return { tz: tz, offsetStr: offsetStr };
   }
-  function closeEventModal() {
-    document.getElementById("eventModal").classList.remove("open");
-    document.getElementById("eventModalBackdrop").classList.remove("show");
+  function updateTzLabel() {
+    var info = tzInfo();
+    var el = document.getElementById("tzLabel");
+    el.textContent = "🌐 " + info.offsetStr;
+    el.title = info.tz;
   }
-  function openEventModal(mode, date, eventId) {
-    modalMode = mode;
-    var deleteBtn = document.getElementById("eventDeleteBtn");
-    deleteBtn.dataset.confirm = "0";
-    deleteBtn.textContent = "Delete";
-    if (mode === "add") {
-      modalDate = date;
-      modalEventId = null;
-      document.getElementById("eventModalTitle").textContent = "Add event";
-      document.getElementById("eventTitleInput").value = "";
-      document.getElementById("eventModalOwner").textContent = "";
-      document.getElementById("eventDeleteBtn").style.display = "none";
-    } else {
+
+  // ---- Day view (pick a date → grid of hours → set start time + duration) ----
+  var HOUR_PX = 44;
+  var dayViewDate = null; // "YYYY-MM-DD" in the viewer's local time
+  var dayViewEditingId = null; // event id being edited, or null when adding
+
+  function showDayViewModal() {
+    document.getElementById("dayViewModal").classList.add("open");
+    document.getElementById("dayViewBackdrop").classList.add("show");
+  }
+  function closeDayViewModal() {
+    document.getElementById("dayViewModal").classList.remove("open");
+    document.getElementById("dayViewBackdrop").classList.remove("show");
+  }
+  function scrollDayViewTo(hour) {
+    var wrap = document.querySelector(".dayview-grid-wrap");
+    wrap.scrollTop = Math.max(0, hour * HOUR_PX - 80);
+  }
+  function renderDayViewHeader() {
+    var d = new Date(dayViewDate + "T00:00:00");
+    document.getElementById("dayViewTitle").textContent =
+      d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+  }
+  function renderDayViewGrid() {
+    var grid = document.getElementById("dayViewGrid");
+    grid.innerHTML = "";
+    grid.style.height = (24 * HOUR_PX) + "px";
+    for (var h = 0; h < 24; h++) {
+      var row = document.createElement("div");
+      row.className = "dv-hour-row";
+      row.style.top = (h * HOUR_PX) + "px";
+      row.innerHTML = '<span class="dv-hour-label">' + String(h).padStart(2, "0") + ":00</span>";
+      grid.appendChild(row);
+    }
+    var layer = document.createElement("div");
+    layer.className = "dv-events-layer";
+    layer.id = "dvEventsLayer";
+    layer.addEventListener("click", onDayViewLayerClick);
+    grid.appendChild(layer);
+    renderDayViewEventBlocks();
+  }
+  function renderDayViewEventBlocks() {
+    var layer = document.getElementById("dvEventsLayer");
+    layer.innerHTML = "";
+    var dayEvents = allEvents.filter(function (ev) {
+      return localDateKeyFromISO(ev.startAt) === dayViewDate && ev.id !== dayViewEditingId;
+    });
+    dayEvents.forEach(function (ev) {
+      var start = new Date(ev.startAt), end = new Date(ev.endAt);
+      var top = (start.getHours() * 60 + start.getMinutes()) / 60 * HOUR_PX;
+      var height = Math.max(18, (end - start) / 60000 / 60 * HOUR_PX);
+      var block = document.createElement("div");
+      block.className = "dv-block " + (ev.mine ? "mine" : "other");
+      block.style.top = top + "px";
+      block.style.height = height + "px";
+      block.title = ev.ownerName + ": " + ev.title;
+      block.innerHTML = '<span class="dv-block-time">' + fmtEventTime(ev.startAt) + "</span>" + escapeHtml(ev.title);
+      if (ev.mine) {
+        block.addEventListener("click", function (e) {
+          e.stopPropagation();
+          openDayView(dayViewDate, ev.id);
+        });
+      }
+      layer.appendChild(block);
+    });
+    updateDayViewPreviewBlock();
+  }
+  function updateDayViewPreviewBlock() {
+    var layer = document.getElementById("dvEventsLayer");
+    if (!layer) return;
+    var old = layer.querySelector(".dv-preview");
+    if (old) old.remove();
+    var startVal = document.getElementById("dvStartInput").value;
+    if (!startVal) return;
+    var parts = startVal.split(":");
+    var hh = parseInt(parts[0], 10), mm = parseInt(parts[1], 10);
+    var durMin = parseInt(document.getElementById("dvDurationInput").value, 10);
+    var top = (hh * 60 + mm) / 60 * HOUR_PX;
+    var height = Math.max(18, durMin / 60 * HOUR_PX);
+    var block = document.createElement("div");
+    block.className = "dv-block dv-preview";
+    block.style.top = top + "px";
+    block.style.height = height + "px";
+    var endMin = hh * 60 + mm + durMin;
+    var endStr = String(Math.floor(endMin / 60) % 24).padStart(2, "0") + ":" + String(endMin % 60).padStart(2, "0");
+    block.innerHTML = '<span class="dv-block-time">' + startVal + "–" + endStr + "</span>";
+    layer.appendChild(block);
+  }
+  function onDayViewLayerClick(e) {
+    if (e.target.closest(".dv-block")) return;
+    var rect = e.currentTarget.getBoundingClientRect();
+    var y = e.clientY - rect.top;
+    var totalMinutes = Math.round((y / HOUR_PX * 60) / 15) * 15;
+    totalMinutes = Math.max(0, Math.min(23 * 60 + 45, totalMinutes));
+    var hh = Math.floor(totalMinutes / 60), mm = totalMinutes % 60;
+    document.getElementById("dvStartInput").value = String(hh).padStart(2, "0") + ":" + String(mm).padStart(2, "0");
+    updateDayViewPreviewBlock();
+  }
+  function setClosestDuration(durMin) {
+    var select = document.getElementById("dvDurationInput");
+    var options = Array.prototype.map.call(select.options, function (o) { return parseInt(o.value, 10); });
+    var closest = options.reduce(function (a, b) { return Math.abs(b - durMin) < Math.abs(a - durMin) ? b : a; });
+    select.value = String(closest);
+  }
+  function openDayView(dateStr, eventId) {
+    dayViewDate = dateStr;
+    dayViewEditingId = eventId || null;
+    var delBtn = document.getElementById("dvDeleteBtn");
+    delBtn.dataset.confirm = "0";
+    delBtn.textContent = "Delete";
+    renderDayViewHeader();
+    renderDayViewGrid();
+    if (eventId) {
       var ev = allEvents.filter(function (e) { return e.id === eventId; })[0];
       if (!ev) return;
-      modalDate = ev.date;
-      modalEventId = ev.id;
-      document.getElementById("eventModalTitle").textContent = "Edit event";
-      document.getElementById("eventTitleInput").value = ev.title;
-      document.getElementById("eventModalOwner").textContent = "Added by " + ev.ownerName;
-      document.getElementById("eventDeleteBtn").style.display = "inline-block";
+      var start = new Date(ev.startAt), end = new Date(ev.endAt);
+      document.getElementById("dvTitleInput").value = ev.title;
+      document.getElementById("dvStartInput").value = String(start.getHours()).padStart(2, "0") + ":" + String(start.getMinutes()).padStart(2, "0");
+      setClosestDuration(Math.round((end - start) / 60000));
+      document.getElementById("dvOwnerLine").textContent = "Added by " + ev.ownerName;
+      document.getElementById("dvDeleteBtn").style.display = ev.mine ? "inline-block" : "none";
+      document.getElementById("dvSaveBtn").style.display = ev.mine ? "inline-block" : "none";
+      document.getElementById("dvTitleInput").disabled = !ev.mine;
+      document.getElementById("dvStartInput").disabled = !ev.mine;
+      document.getElementById("dvDurationInput").disabled = !ev.mine;
+      scrollDayViewTo(start.getHours());
+    } else {
+      document.getElementById("dvTitleInput").value = "";
+      document.getElementById("dvStartInput").value = "09:00";
+      document.getElementById("dvDurationInput").value = "60";
+      document.getElementById("dvOwnerLine").textContent = "";
+      document.getElementById("dvDeleteBtn").style.display = "none";
+      document.getElementById("dvSaveBtn").style.display = "inline-block";
+      document.getElementById("dvTitleInput").disabled = false;
+      document.getElementById("dvStartInput").disabled = false;
+      document.getElementById("dvDurationInput").disabled = false;
+      scrollDayViewTo(9);
     }
-    document.getElementById("eventModalDate").textContent =
-      new Date(modalDate + "T00:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
-    showEventModal();
-    document.getElementById("eventTitleInput").focus();
+    updateDayViewPreviewBlock();
+    showDayViewModal();
+    document.getElementById("dvTitleInput").focus();
   }
-  function saveEventModal() {
-    var title = document.getElementById("eventTitleInput").value.trim();
-    if (!title) { document.getElementById("eventTitleInput").focus(); return; }
+  function saveDayView() {
+    var title = document.getElementById("dvTitleInput").value.trim();
+    if (!title) { document.getElementById("dvTitleInput").focus(); return; }
+    var startVal = document.getElementById("dvStartInput").value;
+    if (!startVal) return;
+    var parts = startVal.split(":");
+    var hh = parseInt(parts[0], 10), mm = parseInt(parts[1], 10);
+    var durMin = parseInt(document.getElementById("dvDurationInput").value, 10);
+    var dparts = dayViewDate.split("-").map(Number);
+    var start = new Date(dparts[0], dparts[1] - 1, dparts[2], hh, mm, 0, 0);
+    var end = new Date(start.getTime() + durMin * 60000);
     withUserName(function () {
-      var req = modalMode === "add"
-        ? fetch("/api/events", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ date: modalDate, title: title })
-          })
-        : fetch("/api/events/" + modalEventId, {
-            method: "PUT", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ title: title })
-          });
+      var body = { title: title, startAt: start.toISOString(), endAt: end.toISOString() };
+      var req = dayViewEditingId
+        ? fetch("/api/events/" + dayViewEditingId, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+        : fetch("/api/events", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       req.then(function (r) {
         if (handleAuthRedirect(r)) return null;
         if (!r.ok) return r.json().then(function (e) { throw new Error(e.error || "Request failed"); });
         return r.json();
       }).then(function (result) {
         if (!result) return;
-        closeEventModal();
         return loadEventsFromServer();
       }).then(function () {
         renderCalendar(currentMonthHolidayMap);
+        closeDayViewModal();
       }).catch(function (err) {
         alert(err.message || "Could not save the event.");
       });
     });
   }
-  function performDeleteEvent() {
-    fetch("/api/events/" + modalEventId, { method: "DELETE" }).then(function (r) {
+  function performDeleteDayViewEvent() {
+    fetch("/api/events/" + dayViewEditingId, { method: "DELETE" }).then(function (r) {
       if (handleAuthRedirect(r)) return false;
       if (!r.ok && r.status !== 204) return r.json().then(function (e) { throw new Error(e.error || "Request failed"); });
       return true;
     }).then(function (ok) {
       if (!ok) return;
-      closeEventModal();
       return loadEventsFromServer();
     }).then(function () {
       renderCalendar(currentMonthHolidayMap);
+      closeDayViewModal();
     }).catch(function (err) {
       alert(err.message || "Could not delete the event.");
     });
   }
-  function setupEventModal() {
-    document.getElementById("eventSaveBtn").addEventListener("click", saveEventModal);
-    var deleteBtn = document.getElementById("eventDeleteBtn");
-    deleteBtn.addEventListener("click", function () {
-      if (!modalEventId) return;
-      if (deleteBtn.dataset.confirm === "1") {
-        performDeleteEvent();
+  function setupDayView() {
+    document.getElementById("dvSaveBtn").addEventListener("click", saveDayView);
+    var delBtn = document.getElementById("dvDeleteBtn");
+    delBtn.addEventListener("click", function () {
+      if (!dayViewEditingId) return;
+      if (delBtn.dataset.confirm === "1") {
+        performDeleteDayViewEvent();
       } else {
-        deleteBtn.dataset.confirm = "1";
-        deleteBtn.textContent = "Click again to confirm";
+        delBtn.dataset.confirm = "1";
+        delBtn.textContent = "Click again to confirm";
       }
     });
-    document.getElementById("eventCancelBtn").addEventListener("click", closeEventModal);
-    document.getElementById("eventModalClose").addEventListener("click", closeEventModal);
-    document.getElementById("eventModalBackdrop").addEventListener("click", closeEventModal);
-    document.getElementById("eventTitleInput").addEventListener("keydown", function (e) {
-      if (e.key === "Enter") saveEventModal();
-      if (e.key === "Escape") closeEventModal();
+    document.getElementById("dvCancelBtn").addEventListener("click", closeDayViewModal);
+    document.getElementById("dayViewClose").addEventListener("click", closeDayViewModal);
+    document.getElementById("dayViewBackdrop").addEventListener("click", closeDayViewModal);
+    document.getElementById("dvStartInput").addEventListener("input", updateDayViewPreviewBlock);
+    document.getElementById("dvDurationInput").addEventListener("change", updateDayViewPreviewBlock);
+    document.getElementById("dvTitleInput").addEventListener("keydown", function (e) {
+      if (e.key === "Enter") saveDayView();
+      if (e.key === "Escape") closeDayViewModal();
     });
     document.getElementById("calBody").addEventListener("click", function (e) {
       var addBtn = e.target.closest(".add-event-btn");
-      if (addBtn) { openEventModal("add", addBtn.getAttribute("data-date")); return; }
+      if (addBtn) { openDayView(addBtn.getAttribute("data-date"), null); return; }
       var titleEl = e.target.closest(".event-title[data-edit-id]");
-      if (titleEl) { openEventModal("edit", null, titleEl.getAttribute("data-edit-id")); return; }
+      if (titleEl) { openDayView(localDateKeyFromISO(allEvents.filter(function (e2) { return e2.id === titleEl.getAttribute("data-edit-id"); })[0].startAt), titleEl.getAttribute("data-edit-id")); return; }
     });
   }
 
@@ -953,7 +1152,8 @@
           var ownerTitle = "Added by " + escapeHtml(ev.ownerName);
           var editAttr = ev.mine ? ' data-edit-id="' + ev.id + '"' : "";
           return '<div class="event-row' + (ev.mine ? " mine" : "") + '">' +
-            '<span class="event-title" title="' + ownerTitle + '"' + editAttr + '>' + escapeHtml(ev.title) + "</span></div>";
+            '<span class="event-title" title="' + ownerTitle + '"' + editAttr + '>' +
+            '<span class="event-time">' + fmtEventTime(ev.startAt) + "</span> " + escapeHtml(ev.title) + "</span></div>";
         }).join("");
 
         td.innerHTML =
@@ -1067,9 +1267,10 @@
   // ---- Wiring ----
   function init() {
     setupThemeToggle();
+    updateTzLabel();
     updateUserButton();
     setupNameModal();
-    setupEventModal();
+    setupDayView();
     loadProfile();
     document.getElementById("signOutBtn").addEventListener("click", signOut);
     renderOfficeList();
