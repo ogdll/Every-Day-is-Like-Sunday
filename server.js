@@ -4,6 +4,31 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
+// Minimal .env loader for local dev (no dependency). Railway sets real env vars
+// directly and doesn't read this file, so it's gitignored and local-only.
+// Only fills in variables that aren't already set, so real env vars always win.
+(function loadDotEnv() {
+  const envPath = path.join(__dirname, '.env');
+  let raw;
+  try {
+    raw = fs.readFileSync(envPath, 'utf8');
+  } catch (e) {
+    return;
+  }
+  raw.split('\n').forEach((line) => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) return;
+    const eq = trimmed.indexOf('=');
+    if (eq === -1) return;
+    const key = trimmed.slice(0, eq).trim();
+    let value = trimmed.slice(eq + 1).trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    if (key && !(key in process.env)) process.env[key] = value;
+  });
+})();
+
 const PORT = process.env.PORT || 3000;
 const ROOT = path.join(__dirname, 'public');
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
