@@ -47,8 +47,12 @@ const LOGIN_TOKEN_TTL_MS = 15 * 60 * 1000; // 15 minutes
 const LOGIN_COOLDOWN_MS = 30 * 1000;
 const ALLOWED_DOMAINS = (process.env.ALLOWED_EMAIL_DOMAINS || 'dataart.com')
   .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
-const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
-const FROM_EMAIL = process.env.FROM_EMAIL || `${APP_NAME} <onboarding@resend.dev>`;
+// SendGrid, with a "Single Sender" verified address (confirmed by clicking a link
+// emailed to that inbox) — no DNS/domain-admin access needed, unlike Resend, which
+// requires a fully DNS-verified sending domain before it'll deliver to arbitrary
+// recipients. FROM_EMAIL must be exactly that verified single-sender address.
+const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY || '';
+const FROM_EMAIL = process.env.FROM_EMAIL || '';
 // Trusted origin for links we email out (e.g. https://every-day.up.railway.app). Without this,
 // the origin is derived from the request's Host header, which a caller can spoof — fine for the
 // app's own pages, but this value ends up in an email, so prefer an explicit, trusted origin.
@@ -219,24 +223,34 @@ function isAllowedEmail(email) {
   return ALLOWED_DOMAINS.indexOf(m[1]) !== -1;
 }
 
-// ---- Resend email ----
+// ---- SendGrid email (Single Sender Verification — no DNS needed) ----
+function parseFromAddress(value) {
+  const m = /^(.*)<(.+)>$/.exec(value.trim());
+  if (m) return { name: m[1].trim().replace(/^"|"$/g, ''), email: m[2].trim() };
+  return { email: value.trim() };
+}
+
 function sendMagicLinkEmail(email, link) {
   return new Promise((resolve, reject) => {
-    if (!RESEND_API_KEY) return reject(new Error('Email sending is not configured on the server (missing RESEND_API_KEY)'));
+    if (!SENDGRID_API_KEY) return reject(new Error('Email sending is not configured on the server (missing SENDGRID_API_KEY)'));
+    if (!FROM_EMAIL) return reject(new Error('FROM_EMAIL is not set — it must be your SendGrid-verified single sender address'));
     const payload = JSON.stringify({
-      from: FROM_EMAIL,
-      to: [email],
+      personalizations: [{ to: [{ email }] }],
+      from: parseFromAddress(FROM_EMAIL),
       subject: `Sign in to ${APP_NAME}`,
-      html: `<p>Click the link below to sign in to <strong>${APP_NAME}</strong>:</p>` +
-            `<p><a href="${link}">${link}</a></p>` +
-            `<p>This link expires in 15 minutes. If you didn't request it, you can ignore this email.</p>`,
+      content: [{
+        type: 'text/html',
+        value: `<p>Click the link below to sign in to <strong>${APP_NAME}</strong>:</p>` +
+               `<p><a href="${link}">${link}</a></p>` +
+               `<p>This link expires in 15 minutes. If you didn't request it, you can ignore this email.</p>`,
+      }],
     });
     const req = https.request({
-      hostname: 'api.resend.com',
-      path: '/emails',
+      hostname: 'api.sendgrid.com',
+      path: '/v3/mail/send',
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${RESEND_API_KEY}`,
+        Authorization: `Bearer ${SENDGRID_API_KEY}`,
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(payload),
       },
@@ -245,7 +259,7 @@ function sendMagicLinkEmail(email, link) {
       res.on('data', (c) => chunks.push(c));
       res.on('end', () => {
         if (res.statusCode >= 200 && res.statusCode < 300) return resolve();
-        reject(new Error(`Resend error ${res.statusCode}: ${Buffer.concat(chunks).toString('utf8')}`));
+        reject(new Error(`SendGrid error ${res.statusCode}: ${Buffer.concat(chunks).toString('utf8')}`));
       });
     });
     req.on('error', reject);
@@ -283,14 +297,14 @@ function handleAuthApi(req, res, parts) {
       }
       const link = `${origin}/api/auth/verify?token=${token}`;
 
-      const sendPromise = RESEND_API_KEY
+      const sendPromise = SENDGRID_API_KEY
         ? sendMagicLinkEmail(email, link)
         : Promise.resolve().then(() => {
-            console.log(`[dev] RESEND_API_KEY is not set — sign-in link for ${email}:\n${link}`);
+            console.log(`[dev] SENDGRID_API_KEY is not set — sign-in link for ${email}:\n${link}`);
           });
 
       sendPromise.then(() => {
-        sendJSON(res, 200, { ok: true, devMode: !RESEND_API_KEY });
+        sendJSON(res, 200, { ok: true, devMode: !SENDGRID_API_KEY });
       }).catch((e) => {
         sendJSON(res, 502, { error: `Could not send the email: ${e.message}` });
       });
@@ -499,5 +513,5 @@ server.listen(PORT, () => {
   console.log(`${APP_NAME} listening on port ${PORT}`);
   console.log(`Data directory: ${DATA_DIR}`);
   console.log(`Allowed email domains: ${ALLOWED_DOMAINS.join(', ')}`);
-  if (!RESEND_API_KEY) console.warn('WARNING: RESEND_API_KEY is not set — sign-in emails cannot be sent.');
+  if (!SENDGRID_API_KEY) console.warn('WARNING: SENDGRID_API_KEY is not set — sign-in emails cannot be sent.');
 });

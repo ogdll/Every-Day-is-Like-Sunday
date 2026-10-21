@@ -31,7 +31,7 @@ No build step, no framework, no dependencies — static HTML/CSS/JS served by a 
 node server.js
 ```
 
-Then open http://localhost:3000. Without `RESEND_API_KEY` set, sign-in links aren't emailed —
+Then open http://localhost:3000. Without `SENDGRID_API_KEY` set, sign-in links aren't emailed —
 they're printed to the server console instead, so you can still sign in while testing.
 
 ## Sign-in / access control
@@ -39,28 +39,30 @@ they're printed to the server console instead, so you can still sign in while te
 Only people with an email on an allowed domain can get in — no password, no account to create.
 They enter their email, get a one-time link by email, click it, done (session lasts 30 days).
 
-**Setting up Resend** (the email sender — free tier is 100 emails/day, 3,000/month, plenty for
-an internal tool):
+**Setting up SendGrid** (the email sender — free tier is 100 emails/day, forever, plenty for an
+internal tool). Uses **Single Sender Verification**, which only requires confirming one inbox
+you control by clicking a link — **no DNS/domain-admin access needed** (unlike most providers,
+which require verifying a whole domain via DNS records before they'll deliver to arbitrary
+recipients):
 
-1. Go to [resend.com](https://resend.com) and sign up (GitHub or email).
-2. In the dashboard: **API Keys → Create API Key**. Name it anything (e.g. "every-day"), leave
-   permissions as "Full access" (or "Sending access" only, which is enough). Copy the key —
-   it's shown once, starts with `re_`.
-3. In Railway: open the service → **Variables** → add `RESEND_API_KEY` with that value.
-4. That's it for a first deploy. Resend's shared `onboarding@resend.dev` sender works out of
-   the box, no domain setup needed, and can send to anyone.
-5. *(Optional, nicer-looking emails)* In Resend: **Domains → Add Domain**, add `dataart.com` (or
-   a subdomain like `mail.dataart.com`) and the DNS records it gives you (SPF/DKIM — your
-   infra/DNS admin can add these as TXT/CNAME records). Once verified, set the `FROM_EMAIL`
-   Railway variable to something like `Every Day Is Like Sunday <noreply@dataart.com>`.
+1. Go to [sendgrid.com](https://sendgrid.com) and sign up.
+2. **Settings → Sender Authentication → Verify a Single Sender.** Fill in the from name (e.g.
+   "Every Day Is Like Sunday") and the from-email address — use an inbox you can read, e.g. your
+   own `you@dataart.com` or a shared mailbox like `noreply@dataart.com` if you have one.
+3. SendGrid emails that inbox a confirmation link — open it and click it. Done, no DNS.
+4. **Settings → API Keys → Create API Key** (Restricted Access is fine — just enable "Mail
+   Send"). Copy the key — it's shown once, starts with `SG.`.
+5. In Railway: service → **Variables** → add `SENDGRID_API_KEY` with that value, and `FROM_EMAIL`
+   set to **exactly** the address you verified in step 2, e.g.
+   `Every Day Is Like Sunday <you@dataart.com>`.
 
 **Environment variables** (set in Railway → service → Variables):
 
 | Variable | Default | What it does |
 | --- | --- | --- |
-| `RESEND_API_KEY` | *(none)* | Required to actually send sign-in emails. Without it, links are only logged to the server console — fine for testing, not for real use. |
+| `SENDGRID_API_KEY` | *(none)* | Required to actually send sign-in emails. Without it, links are only logged to the server console — fine for testing, not for real use. |
 | `ALLOWED_EMAIL_DOMAINS` | `dataart.com` | Comma-separated list of domains allowed to sign in, e.g. `dataart.com,partner.com`. |
-| `FROM_EMAIL` | `Every Day Is Like Sunday <onboarding@resend.dev>` | Sender shown on the email. Needs a Resend-verified domain to use your own address. |
+| `FROM_EMAIL` | *(none — required once `SENDGRID_API_KEY` is set)* | Must be exactly the address you verified in SendGrid's Single Sender Verification, e.g. `Every Day Is Like Sunday <you@dataart.com>`. |
 | `APP_BASE_URL` | *(derived from the request)* | The public URL Railway gives the service, e.g. `https://every-day-is-like-sunday.up.railway.app`. **Set this explicitly in production** — without it, the link emailed to people is built from the incoming request's `Host` header, which isn't a value to trust for something that ends up in an email. |
 
 This is sign-in, not a full account system: there's no admin panel, no way to revoke one
@@ -74,7 +76,8 @@ moves behind the company's actual intranet or SSO.
 1. Push this folder to a GitHub repo (or use the Railway CLI directly, see below).
 2. In Railway: **New Project → Deploy from GitHub repo**, pick the repo.
    Railway's Nixpacks builder auto-detects Node from `package.json` and runs `npm start`.
-3. Add the environment variables from the table above (`RESEND_API_KEY` at minimum).
+3. Add the environment variables from the table above (`SENDGRID_API_KEY` and `FROM_EMAIL` at
+   minimum).
 4. Once deployed, Railway gives you a public URL (or attach your own domain in the project's
    Settings → Domains) — set that as `APP_BASE_URL`.
 

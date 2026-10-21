@@ -100,7 +100,7 @@
       if (res.ok) {
         msg.className = "msg success";
         msg.textContent = res.data.devMode
-          ? "Email sending isn't configured yet (no RESEND_API_KEY) — check the server logs for your sign-in link."
+          ? "Email sending isn't configured yet (no SENDGRID_API_KEY) — check the server logs for your sign-in link."
           : "Check " + email + " for a sign-in link. It expires in 15 minutes.";
         form.style.display = "none";
       } else {
