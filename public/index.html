@@ -282,7 +282,7 @@
     </div>
     <div style="display:flex; gap:8px; align-items:center;">
       <span class="tz-label" id="tzLabel" title=""></span>
-      <button class="theme-toggle" id="userBtn" title="Set your display name"></button>
+      <span class="tz-label" id="userLabel"></span>
       <button class="theme-toggle" id="signOutBtn" title="Sign out">Sign out</button>
       <button class="theme-toggle" id="themeToggle" title="Toggle light/dark theme"></button>
     </div>
@@ -393,20 +393,6 @@
     </div>
   </div>
 
-  <div class="modal-backdrop" id="nameModalBackdrop"></div>
-  <div class="modal" id="nameModal">
-    <div class="modal-header">
-      <h2>Your name</h2>
-      <button class="drawer-close" id="nameModalClose" title="Close">×</button>
-    </div>
-    <div class="modal-date">Shown to others as the owner of the events you add.</div>
-    <input type="text" id="nameInput" maxlength="80" placeholder="e.g. Daniel Lurye" autocomplete="off">
-    <div class="modal-actions">
-      <div class="spacer"></div>
-      <button class="nav-btn" id="nameCancelBtn">Cancel</button>
-      <button class="refresh-btn" id="nameSaveBtn">Save</button>
-    </div>
-  </div>
 </div>
 
 <script>
@@ -449,10 +435,9 @@
     });
   }
 
-  // ---- User identity (verified via /api/auth, session cookie is authoritative;
-  //      the display name here is just cosmetic and lives server-side per email) ----
-  var profile = { email: "", name: "" };
-  var pendingNameCallback = null;
+  // ---- User identity (verified via /api/auth; the session cookie is authoritative
+  //      and HttpOnly, so the frontend asks the server who it is) ----
+  var profile = { email: "" };
 
   function handleAuthRedirect(r) {
     if (r.status === 401) { window.location.href = "/login.html"; return true; }
@@ -463,64 +448,12 @@
       if (handleAuthRedirect(r)) return null;
       return r.ok ? r.json() : null;
     }).then(function (data) {
-      if (data) { profile = data; updateUserButton(); }
+      if (data) { profile = data; updateUserLabel(); }
       return data;
     }).catch(function () { return null; });
   }
-  function updateUserButton() {
-    var btn = document.getElementById("userBtn");
-    btn.textContent = profile.name ? "👤 " + profile.name : "👤 " + (profile.email || "Set name");
-  }
-  function showNameModal() {
-    document.getElementById("nameModal").classList.add("open");
-    document.getElementById("nameModalBackdrop").classList.add("show");
-  }
-  function closeNameModal() {
-    document.getElementById("nameModal").classList.remove("open");
-    document.getElementById("nameModalBackdrop").classList.remove("show");
-    pendingNameCallback = null;
-  }
-  function openNameModal(callback) {
-    pendingNameCallback = callback || null;
-    document.getElementById("nameInput").value = profile.name || "";
-    showNameModal();
-    document.getElementById("nameInput").focus();
-  }
-  function saveNameModal() {
-    var val = document.getElementById("nameInput").value.trim();
-    if (!val) { document.getElementById("nameInput").focus(); return; }
-    fetch("/api/profile", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: val }),
-    }).then(function (r) {
-      if (handleAuthRedirect(r)) return null;
-      return r.ok ? r.json() : Promise.reject(new Error("Could not save your name."));
-    }).then(function (data) {
-      if (!data) return;
-      profile = data;
-      updateUserButton();
-      document.getElementById("nameModal").classList.remove("open");
-      document.getElementById("nameModalBackdrop").classList.remove("show");
-      return loadEventsFromServer().then(function () {
-        renderCalendar(currentMonthHolidayMap);
-        var cb = pendingNameCallback;
-        pendingNameCallback = null;
-        if (cb) cb();
-      });
-    }).catch(function (err) {
-      alert(err.message || "Could not save your name.");
-    });
-  }
-  function setupNameModal() {
-    document.getElementById("userBtn").addEventListener("click", function () { openNameModal(null); });
-    document.getElementById("nameSaveBtn").addEventListener("click", saveNameModal);
-    document.getElementById("nameCancelBtn").addEventListener("click", closeNameModal);
-    document.getElementById("nameModalClose").addEventListener("click", closeNameModal);
-    document.getElementById("nameModalBackdrop").addEventListener("click", closeNameModal);
-    document.getElementById("nameInput").addEventListener("keydown", function (e) {
-      if (e.key === "Enter") saveNameModal();
-      if (e.key === "Escape") closeNameModal();
-    });
+  function updateUserLabel() {
+    document.getElementById("userLabel").textContent = "👤 " + (profile.email || "");
   }
   function signOut() {
     fetch("/api/auth/logout", { method: "POST" }).then(function () {
@@ -528,11 +461,6 @@
     }).catch(function () {
       window.location.href = "/login.html";
     });
-  }
-  // Runs callback() once a display name is known, opening the name modal first if needed.
-  function withUserName(callback) {
-    if (profile.name) { callback(); return; }
-    openNameModal(callback);
   }
 
   // ---- Default office countries (DataArt offices, from dataart.com/contact-us) ----
@@ -902,7 +830,7 @@
       block.className = "dv-block " + (ev.mine ? "mine" : "other");
       block.style.top = top + "px";
       block.style.height = height + "px";
-      block.title = ev.ownerName + ": " + ev.title;
+      block.title = ev.ownerEmail + ": " + ev.title;
       block.innerHTML = '<span class="dv-block-time">' + fmtEventTime(ev.startAt) + "</span>" + escapeHtml(ev.title);
       if (ev.mine) {
         block.addEventListener("click", function (e) {
@@ -966,7 +894,7 @@
       document.getElementById("dvTitleInput").value = ev.title;
       document.getElementById("dvStartInput").value = String(start.getHours()).padStart(2, "0") + ":" + String(start.getMinutes()).padStart(2, "0");
       setClosestDuration(Math.round((end - start) / 60000));
-      document.getElementById("dvOwnerLine").textContent = "Added by " + ev.ownerName;
+      document.getElementById("dvOwnerLine").textContent = "Added by " + ev.ownerEmail;
       document.getElementById("dvDeleteBtn").style.display = ev.mine ? "inline-block" : "none";
       document.getElementById("dvSaveBtn").style.display = ev.mine ? "inline-block" : "none";
       document.getElementById("dvTitleInput").disabled = !ev.mine;
@@ -1000,24 +928,22 @@
     var dparts = dayViewDate.split("-").map(Number);
     var start = new Date(dparts[0], dparts[1] - 1, dparts[2], hh, mm, 0, 0);
     var end = new Date(start.getTime() + durMin * 60000);
-    withUserName(function () {
-      var body = { title: title, startAt: start.toISOString(), endAt: end.toISOString() };
-      var req = dayViewEditingId
-        ? fetch("/api/events/" + dayViewEditingId, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
-        : fetch("/api/events", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      req.then(function (r) {
-        if (handleAuthRedirect(r)) return null;
-        if (!r.ok) return r.json().then(function (e) { throw new Error(e.error || "Request failed"); });
-        return r.json();
-      }).then(function (result) {
-        if (!result) return;
-        return loadEventsFromServer();
-      }).then(function () {
-        renderCalendar(currentMonthHolidayMap);
-        closeDayViewModal();
-      }).catch(function (err) {
-        alert(err.message || "Could not save the event.");
-      });
+    var body = { title: title, startAt: start.toISOString(), endAt: end.toISOString() };
+    var req = dayViewEditingId
+      ? fetch("/api/events/" + dayViewEditingId, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+      : fetch("/api/events", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    req.then(function (r) {
+      if (handleAuthRedirect(r)) return null;
+      if (!r.ok) return r.json().then(function (e) { throw new Error(e.error || "Request failed"); });
+      return r.json();
+    }).then(function (result) {
+      if (!result) return;
+      return loadEventsFromServer();
+    }).then(function () {
+      renderCalendar(currentMonthHolidayMap);
+      closeDayViewModal();
+    }).catch(function (err) {
+      alert(err.message || "Could not save the event.");
     });
   }
   function performDeleteDayViewEvent() {
@@ -1149,7 +1075,7 @@
 
         var evs = eventsByDate[dateStr] || [];
         var eventsHtml = evs.map(function (ev) {
-          var ownerTitle = "Added by " + escapeHtml(ev.ownerName);
+          var ownerTitle = "Added by " + escapeHtml(ev.ownerEmail);
           var editAttr = ev.mine ? ' data-edit-id="' + ev.id + '"' : "";
           return '<div class="event-row' + (ev.mine ? " mine" : "") + '">' +
             '<span class="event-title" title="' + ownerTitle + '"' + editAttr + '>' +
@@ -1268,8 +1194,6 @@
   function init() {
     setupThemeToggle();
     updateTzLabel();
-    updateUserButton();
-    setupNameModal();
     setupDayView();
     loadProfile();
     document.getElementById("signOutBtn").addEventListener("click", signOut);

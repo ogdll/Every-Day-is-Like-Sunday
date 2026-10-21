@@ -90,7 +90,7 @@ railway up
 
 ## Persisting data
 
-Events, sessions and display names are written to `data/*.json` (directory overridable via the
+Events and sessions are written to `data/*.json` (directory overridable via the
 `DATA_DIR` env var). Railway's default filesystem is **ephemeral** — it's wiped on every
 redeploy — so without extra setup, events disappear and everyone gets signed out on each
 redeploy. To keep them:

@@ -34,10 +34,8 @@ const ROOT = path.join(__dirname, 'public');
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const EVENTS_FILE = path.join(DATA_DIR, 'events.json');
 const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
-const PROFILES_FILE = path.join(DATA_DIR, 'profiles.json');
 const MAX_BODY_BYTES = 20 * 1024;
 const MAX_TITLE_LEN = 200;
-const MAX_NAME_LEN = 80;
 const MIN_EVENT_MS = 5 * 60 * 1000;
 const MAX_EVENT_MS = 24 * 60 * 60 * 1000;
 
@@ -126,8 +124,6 @@ function loadEvents() { const d = loadJSONFile(EVENTS_FILE, []); return Array.is
 function saveEvents(events) { saveJSONFile(EVENTS_FILE, events); }
 function loadSessions() { return loadJSONFile(SESSIONS_FILE, {}); }
 function saveSessions(s) { saveJSONFile(SESSIONS_FILE, s); }
-function loadProfiles() { return loadJSONFile(PROFILES_FILE, {}); }
-function saveProfiles(p) { saveJSONFile(PROFILES_FILE, p); }
 
 function sendJSON(res, status, obj) {
   const body = JSON.stringify(obj);
@@ -339,23 +335,10 @@ function handleAuthApi(req, res, parts) {
   sendJSON(res, 404, { error: 'Not found' });
 }
 
-// ---- Profile API (display name shown next to a session's email) ----
+// ---- "Who am I" (the frontend can't read the HttpOnly session cookie itself) ----
 function handleProfileApi(req, res, session) {
   if (req.method === 'GET') {
-    const profiles = loadProfiles();
-    const name = (profiles[session.email] && profiles[session.email].name) || '';
-    return sendJSON(res, 200, { email: session.email, name });
-  }
-  if (req.method === 'POST') {
-    return readBody(req, (err, body) => {
-      if (err) return sendJSON(res, 400, { error: err.message });
-      const name = cleanString(body.name, MAX_NAME_LEN);
-      if (!name) return sendJSON(res, 400, { error: 'Name is required' });
-      const profiles = loadProfiles();
-      profiles[session.email] = { name };
-      saveProfiles(profiles);
-      return sendJSON(res, 200, { email: session.email, name });
-    });
+    return sendJSON(res, 200, { email: session.email });
   }
   sendJSON(res, 404, { error: 'Not found' });
 }
@@ -363,11 +346,7 @@ function handleProfileApi(req, res, session) {
 // ---- Events API (ownership is the verified session email, not client input) ----
 // Events are stored as absolute UTC instants (startAt/endAt, ISO 8601). Which
 // calendar day and what local time they fall on is computed per viewer, client-side.
-function resolveOwnerName(email, profiles) {
-  if (!email) return 'Unknown';
-  return (profiles[email] && profiles[email].name) || String(email).split('@')[0];
-}
-
+// The owner is shown as their email — no separate display name to manage.
 function parseEventTimes(body) {
   const startAt = new Date(cleanString(body.startAt, 40));
   const endAt = new Date(cleanString(body.endAt, 40));
@@ -378,21 +357,19 @@ function parseEventTimes(body) {
   return { startAt: startAt.toISOString(), endAt: endAt.toISOString() };
 }
 
-function serializeEvent(e, profiles, session) {
+function serializeEvent(e, session) {
   return {
     id: e.id, title: e.title, startAt: e.startAt, endAt: e.endAt,
     ownerEmail: e.ownerEmail,
-    ownerName: resolveOwnerName(e.ownerEmail, profiles),
     mine: e.ownerEmail === session.email,
   };
 }
 
 function handleEventsApi(req, res, parts, session) {
   if (parts.length === 2 && req.method === 'GET') {
-    const profiles = loadProfiles();
     const events = loadEvents()
       .filter((e) => e.startAt && e.endAt)
-      .map((e) => serializeEvent(e, profiles, session));
+      .map((e) => serializeEvent(e, session));
     return sendJSON(res, 200, events);
   }
 
@@ -413,8 +390,7 @@ function handleEventsApi(req, res, parts, session) {
       };
       events.push(event);
       saveEvents(events);
-      const profiles = loadProfiles();
-      return sendJSON(res, 201, serializeEvent(event, profiles, session));
+      return sendJSON(res, 201, serializeEvent(event, session));
     });
   }
 
@@ -434,8 +410,7 @@ function handleEventsApi(req, res, parts, session) {
 
       events[idx] = { ...events[idx], title, startAt: times.startAt, endAt: times.endAt, updatedAt: new Date().toISOString() };
       saveEvents(events);
-      const profiles = loadProfiles();
-      return sendJSON(res, 200, serializeEvent(events[idx], profiles, session));
+      return sendJSON(res, 200, serializeEvent(events[idx], session));
     });
   }
 
