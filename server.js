@@ -39,6 +39,19 @@ const MAX_TITLE_LEN = 200;
 const MIN_EVENT_MS = 5 * 60 * 1000;
 const MAX_EVENT_MS = 24 * 60 * 60 * 1000;
 
+// Event classification: a country (or no country, meaning a global event), a genre,
+// and freeform-but-fixed tags. Exposed to the frontend via GET /api/events/meta so the
+// tag/genre list lives in exactly one place.
+const EVENT_GENRES = ['event', 'session', 'mailing'];
+const EVENT_TAGS = [
+  'Ukraine Local News', 'Town Hall', 'Team Spirit Community', 'Sync',
+  'Early Career Events', 'DataArt FM', 'QA Meetings', 'Python Community',
+  'PM Community', 'PHP coffee hours', 'Mobile community', 'Javascript community',
+  'DevOps Community', 'BA/PO/Discovery Community Sessions', 'All Community Events',
+  'AI Community', '.net community',
+];
+const COUNTRY_CODE_RE = /^[A-Z]{2}$/;
+
 const APP_NAME = 'Every Day Is Like Sunday';
 const SESSION_COOKIE = 'edils_session';
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -357,15 +370,37 @@ function parseEventTimes(body) {
   return { startAt: startAt.toISOString(), endAt: endAt.toISOString() };
 }
 
+function parseEventMeta(body) {
+  const genre = cleanString(body.genre, 20) || 'event';
+  if (EVENT_GENRES.indexOf(genre) === -1) return { error: 'Invalid genre' };
+
+  const country = cleanString(body.country, 2).toUpperCase();
+  if (country && !COUNTRY_CODE_RE.test(country)) return { error: 'Invalid country' };
+
+  const tagsIn = Array.isArray(body.tags) ? body.tags : [];
+  const tags = [];
+  tagsIn.forEach((t) => {
+    const s = cleanString(t, 60);
+    if (EVENT_TAGS.indexOf(s) !== -1 && tags.indexOf(s) === -1) tags.push(s);
+  });
+
+  return { genre, country, tags };
+}
+
 function serializeEvent(e, session) {
   return {
     id: e.id, title: e.title, startAt: e.startAt, endAt: e.endAt,
+    country: e.country || '', genre: e.genre || 'event', tags: Array.isArray(e.tags) ? e.tags : [],
     ownerEmail: e.ownerEmail,
     mine: e.ownerEmail === session.email,
   };
 }
 
 function handleEventsApi(req, res, parts, session) {
+  if (parts.length === 3 && parts[2] === 'meta' && req.method === 'GET') {
+    return sendJSON(res, 200, { genres: EVENT_GENRES, tags: EVENT_TAGS });
+  }
+
   if (parts.length === 2 && req.method === 'GET') {
     const events = loadEvents()
       .filter((e) => e.startAt && e.endAt)
@@ -380,11 +415,14 @@ function handleEventsApi(req, res, parts, session) {
       if (!title) return sendJSON(res, 400, { error: 'Title is required' });
       const times = parseEventTimes(body);
       if (times.error) return sendJSON(res, 400, { error: times.error });
+      const meta = parseEventMeta(body);
+      if (meta.error) return sendJSON(res, 400, { error: meta.error });
 
       const events = loadEvents();
       const event = {
         id: crypto.randomUUID(),
         title, startAt: times.startAt, endAt: times.endAt,
+        country: meta.country, genre: meta.genre, tags: meta.tags,
         ownerEmail: session.email,
         createdAt: new Date().toISOString(),
       };
@@ -402,13 +440,19 @@ function handleEventsApi(req, res, parts, session) {
       if (!title) return sendJSON(res, 400, { error: 'Title is required' });
       const times = parseEventTimes(body);
       if (times.error) return sendJSON(res, 400, { error: times.error });
+      const meta = parseEventMeta(body);
+      if (meta.error) return sendJSON(res, 400, { error: meta.error });
 
       const events = loadEvents();
       const idx = events.findIndex((e) => e.id === id);
       if (idx === -1) return sendJSON(res, 404, { error: 'Not found' });
       if (events[idx].ownerEmail !== session.email) return sendJSON(res, 403, { error: 'Only the owner can edit this event' });
 
-      events[idx] = { ...events[idx], title, startAt: times.startAt, endAt: times.endAt, updatedAt: new Date().toISOString() };
+      events[idx] = {
+        ...events[idx], title, startAt: times.startAt, endAt: times.endAt,
+        country: meta.country, genre: meta.genre, tags: meta.tags,
+        updatedAt: new Date().toISOString(),
+      };
       saveEvents(events);
       return sendJSON(res, 200, serializeEvent(events[idx], session));
     });
