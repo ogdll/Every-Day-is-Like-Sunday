@@ -166,6 +166,15 @@
     flex: 1; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border);
     background: var(--bg); color: var(--text); font-size: 14px;
   }
+  .dayview-tags-label { margin-top: 10px; font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .04em; }
+  .dayview-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; max-height: 110px; overflow-y: auto; padding: 2px; }
+  .tag-chip {
+    font-size: 11.5px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--text-dim); cursor: pointer; user-select: none; white-space: nowrap;
+  }
+  .tag-chip:hover { border-color: var(--accent); }
+  .tag-chip.active { background: var(--accent-weak); border-color: var(--accent); color: var(--text); }
+  .tag-chip:disabled { cursor: default; opacity: .6; }
 
   .panel {
     background: var(--panel);
@@ -383,6 +392,12 @@
           <option value="240">4 hours</option>
         </select>
       </div>
+      <div class="dayview-time-row">
+        <select id="dvCountryInput"></select>
+        <select id="dvGenreInput"></select>
+      </div>
+      <div class="dayview-tags-label">Tags</div>
+      <div class="dayview-tags" id="dvTagsWrap"></div>
       <div class="modal-owner" id="dvOwnerLine"></div>
       <div class="modal-actions">
         <button class="danger-btn" id="dvDeleteBtn" style="display:none;">Delete</button>
@@ -729,6 +744,70 @@
   var allEvents = [];
   var eventsByDate = {};
 
+  // Event classification (country/global, genre, tags) — the tag/genre list is
+  // authoritative on the server; fetched once so it can't drift out of sync.
+  var eventMeta = { genres: ["event", "session", "mailing"], tags: [] };
+  var selectedTags = []; // tags checked in the currently open day-view form
+
+  function loadEventMeta() {
+    return fetch("/api/events/meta").then(function (r) {
+      if (handleAuthRedirect(r)) return null;
+      return r.ok ? r.json() : null;
+    }).then(function (data) {
+      if (data && Array.isArray(data.tags) && Array.isArray(data.genres)) eventMeta = data;
+      renderCountrySelect();
+      renderGenreSelect();
+      renderTagChips();
+    }).catch(function () {});
+  }
+  function renderCountrySelect() {
+    var sel = document.getElementById("dvCountryInput");
+    var opts = ['<option value="">🌐 Global</option>'];
+    OFFICES.forEach(function (o) {
+      opts.push('<option value="' + o.code + '">' + flagForCode(o.code) + " " + escapeHtml(o.name) + "</option>");
+    });
+    sel.innerHTML = opts.join("");
+  }
+  function renderGenreSelect() {
+    var sel = document.getElementById("dvGenreInput");
+    sel.innerHTML = eventMeta.genres.map(function (g) {
+      var label = g.charAt(0).toUpperCase() + g.slice(1);
+      return '<option value="' + escapeHtml(g) + '">' + escapeHtml(label) + "</option>";
+    }).join("");
+  }
+  function renderTagChips() {
+    var wrap = document.getElementById("dvTagsWrap");
+    wrap.innerHTML = eventMeta.tags.map(function (t) {
+      return '<button type="button" class="tag-chip" data-tag="' + escapeHtml(t) + '">' + escapeHtml(t) + "</button>";
+    }).join("");
+    wrap.querySelectorAll(".tag-chip").forEach(function (chip) {
+      chip.addEventListener("click", function () {
+        var tag = chip.getAttribute("data-tag");
+        var i = selectedTags.indexOf(tag);
+        if (i === -1) selectedTags.push(tag); else selectedTags.splice(i, 1);
+        chip.classList.toggle("active", i === -1);
+      });
+    });
+  }
+  function setTagChipsDisabled(disabled) {
+    document.querySelectorAll("#dvTagsWrap .tag-chip").forEach(function (chip) { chip.disabled = disabled; });
+  }
+  function setTagChipsSelection(tags) {
+    selectedTags = (tags || []).slice();
+    document.querySelectorAll("#dvTagsWrap .tag-chip").forEach(function (chip) {
+      chip.classList.toggle("active", selectedTags.indexOf(chip.getAttribute("data-tag")) !== -1);
+    });
+  }
+  function genreLabel(g) {
+    g = g || "event";
+    return g.charAt(0).toUpperCase() + g.slice(1);
+  }
+  function eventInfoLine(ev) {
+    var bits = [ev.country ? (countryNameByCode[ev.country] || ev.country) : "Global", genreLabel(ev.genre)];
+    if (ev.tags && ev.tags.length) bits.push(ev.tags.join(", "));
+    return bits.join(" · ");
+  }
+
   function localDateKey(d) {
     return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
   }
@@ -830,8 +909,9 @@
       block.className = "dv-block " + (ev.mine ? "mine" : "other");
       block.style.top = top + "px";
       block.style.height = height + "px";
-      block.title = ev.ownerEmail + ": " + ev.title;
-      block.innerHTML = '<span class="dv-block-time">' + fmtEventTime(ev.startAt) + "</span>" + escapeHtml(ev.title);
+      block.title = ev.ownerEmail + ": " + ev.title + " — " + eventInfoLine(ev);
+      var dvFlagPrefix = ev.country ? flagForCode(ev.country) + " " : "";
+      block.innerHTML = '<span class="dv-block-time">' + fmtEventTime(ev.startAt) + "</span>" + dvFlagPrefix + escapeHtml(ev.title);
       block.addEventListener("click", function (e) {
         e.stopPropagation();
         openDayView(dayViewDate, ev.id);
@@ -898,6 +978,12 @@
       document.getElementById("dvTitleInput").disabled = !ev.mine;
       document.getElementById("dvStartInput").disabled = !ev.mine;
       document.getElementById("dvDurationInput").disabled = !ev.mine;
+      document.getElementById("dvCountryInput").value = ev.country || "";
+      document.getElementById("dvGenreInput").value = ev.genre || "event";
+      document.getElementById("dvCountryInput").disabled = !ev.mine;
+      document.getElementById("dvGenreInput").disabled = !ev.mine;
+      setTagChipsSelection(ev.tags);
+      setTagChipsDisabled(!ev.mine);
       scrollDayViewTo(start.getHours());
     } else {
       document.getElementById("dvTitleInput").value = "";
@@ -909,6 +995,12 @@
       document.getElementById("dvTitleInput").disabled = false;
       document.getElementById("dvStartInput").disabled = false;
       document.getElementById("dvDurationInput").disabled = false;
+      document.getElementById("dvCountryInput").value = "";
+      document.getElementById("dvGenreInput").value = "event";
+      document.getElementById("dvCountryInput").disabled = false;
+      document.getElementById("dvGenreInput").disabled = false;
+      setTagChipsSelection([]);
+      setTagChipsDisabled(false);
       scrollDayViewTo(9);
     }
     updateDayViewPreviewBlock();
@@ -926,7 +1018,12 @@
     var dparts = dayViewDate.split("-").map(Number);
     var start = new Date(dparts[0], dparts[1] - 1, dparts[2], hh, mm, 0, 0);
     var end = new Date(start.getTime() + durMin * 60000);
-    var body = { title: title, startAt: start.toISOString(), endAt: end.toISOString() };
+    var body = {
+      title: title, startAt: start.toISOString(), endAt: end.toISOString(),
+      country: document.getElementById("dvCountryInput").value,
+      genre: document.getElementById("dvGenreInput").value,
+      tags: selectedTags.slice(),
+    };
     var req = dayViewEditingId
       ? fetch("/api/events/" + dayViewEditingId, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
       : fetch("/api/events", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -1073,10 +1170,11 @@
 
         var evs = eventsByDate[dateStr] || [];
         var eventsHtml = evs.map(function (ev) {
-          var ownerTitle = "Added by " + escapeHtml(ev.ownerEmail);
+          var evTitle = escapeHtml("Added by " + ev.ownerEmail + " — " + eventInfoLine(ev));
+          var flagPrefix = ev.country ? flagForCode(ev.country) + " " : "";
           return '<div class="event-row' + (ev.mine ? " mine" : "") + '">' +
-            '<span class="event-title" title="' + ownerTitle + '" data-edit-id="' + ev.id + '">' +
-            '<span class="event-time">' + fmtEventTime(ev.startAt) + "</span> " + escapeHtml(ev.title) + "</span></div>";
+            '<span class="event-title" title="' + evTitle + '" data-edit-id="' + ev.id + '">' +
+            '<span class="event-time">' + fmtEventTime(ev.startAt) + "</span> " + flagPrefix + escapeHtml(ev.title) + "</span></div>";
         }).join("");
 
         td.innerHTML =
@@ -1192,6 +1290,7 @@
     setupThemeToggle();
     updateTzLabel();
     setupDayView();
+    loadEventMeta();
     loadProfile();
     document.getElementById("signOutBtn").addEventListener("click", signOut);
     renderOfficeList();
